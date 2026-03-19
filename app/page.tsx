@@ -754,9 +754,7 @@ export default function Page() {
           </div>
         </footer>
 
-        <FloatingWhatsApp
-          message={`Hola! Quiero info de ${WORKSHOP_LABEL}. ¿Me contás cómo es la Fase 1 (2 días intensivos) y cómo reservar?`}
-        />
+        <FloatingWhatsApp />
       </div>
     </main>
   );
