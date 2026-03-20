@@ -6,7 +6,7 @@
 
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { Reveal } from './components/Reveal';
 import { WhatsAppForm } from './components/WhatsAppForm';
 import { Faq } from './components/Faq';
@@ -368,7 +368,7 @@ function KickerLoop({ children }: { children: string }) {
   );
 }
 
-export default function Page() {
+function PageContent() {
   const searchParams = useSearchParams();
   const isPreview = searchParams?.get('preview') === '1';
   const isEmbed = searchParams?.get('embed') === '1';
@@ -758,5 +758,12 @@ export default function Page() {
       </div>
     </main>
   );
+}
 
+export default function Page() {
+  return (
+    <Suspense>
+      <PageContent />
+    </Suspense>
+  );
 }
