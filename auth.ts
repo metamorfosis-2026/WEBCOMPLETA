@@ -12,6 +12,26 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function getSuperadminEmails() {
+  const emails = new Set<string>();
+
+  const owner = process.env.OWNER_EMAIL;
+  if (owner?.trim()) emails.add(normalizeEmail(owner));
+
+  const extraAdmins = process.env.SUPERADMIN_EMAILS ?? '';
+  for (const email of extraAdmins.split(',')) {
+    const normalized = email.trim();
+    if (normalized) emails.add(normalizeEmail(normalized));
+  }
+
+  return emails;
+}
+
+function isSuperadminEmail(email?: string | null) {
+  if (!email) return false;
+  return getSuperadminEmails().has(normalizeEmail(email));
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' },
@@ -47,13 +67,13 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user }) {
-      // Bootstrap admin role via env
-      const owner = process.env.OWNER_EMAIL?.trim().toLowerCase();
-      if (owner && user.email && user.email.toLowerCase() === owner) {
+      if (user.id && user.email) {
+        const role = isSuperadminEmail(user.email) ? 'ADMIN' : 'USER';
+
         try {
           await prisma.user.update({
             where: { id: user.id },
-            data: { role: 'ADMIN' },
+            data: { role },
           });
         } catch {
           // ignore
@@ -68,11 +88,13 @@ export const authOptions: NextAuthOptions = {
 
       const dbUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { role: true, status: true, referralCode: true, pointsBalance: true },
+        select: { email: true, role: true, status: true, referralCode: true, pointsBalance: true },
       });
 
+      const resolvedRole = isSuperadminEmail(dbUser?.email) ? 'ADMIN' : 'USER';
+
       token.id = userId;
-      token.role = (dbUser?.role ?? 'USER') as 'USER' | 'ADMIN';
+      token.role = resolvedRole;
       token.status = (dbUser?.status ?? 'INTERESADO') as
         | 'INTERESADO'
         | 'FASE_1'
@@ -103,7 +125,17 @@ export const authOptions: NextAuthOptions = {
       // Ensure referralCode exists for OAuth-created users
       if (!user.id) return;
       const existing = await prisma.user.findUnique({ where: { id: user.id } });
-      if (existing?.referralCode) return;
+      if (existing?.referralCode) {
+        if (user.email && existing.role !== (isSuperadminEmail(user.email) ? 'ADMIN' : 'USER')) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: isSuperadminEmail(user.email) ? 'ADMIN' : 'USER' },
+          });
+        }
+        return;
+      }
+
+      const role = isSuperadminEmail(user.email) ? 'ADMIN' : 'USER';
 
       // Retry a few times in case of unique collision
       for (let i = 0; i < 3; i++) {
@@ -117,6 +149,13 @@ export const authOptions: NextAuthOptions = {
         } catch {
           // try again
         }
+      }
+
+      if (existing?.role !== role) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { role },
+        });
       }
     },
   },
