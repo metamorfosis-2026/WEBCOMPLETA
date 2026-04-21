@@ -9,6 +9,7 @@ datasource db {
 
 model User {
   id            String    @id @default(cuid())
+  supabaseAuthId String?   @unique
   name          String?
   email         String?   @unique
   emailVerified DateTime?
@@ -30,6 +31,8 @@ model User {
 
   pointsTransactions PointsTransaction[]
   statusEvents       UserStatusEvent[]
+  enrollments        Enrollment[]
+  paymentsRecorded   Payment[] @relation("PaymentRecordedBy")
 
   accounts      Account[]
   sessions      Session[]
@@ -92,4 +95,54 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Edition {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  title       String
+  sequence    Int          @unique
+  isCurrent   Boolean      @default(false)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  notes       String?
+  enrollments Enrollment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Enrollment {
+  id             String    @id @default(cuid())
+  userId         String
+  editionId      String
+  status         String    @default("PENDIENTE")
+  amountDueCents Int       @default(0)
+  currency       String    @default("ARS")
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  edition        Edition   @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  payments       Payment[]
+
+  @@unique([userId, editionId])
+}
+
+model Payment {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  amountCents  Int
+  currency     String     @default("ARS")
+  status       String     @default("CONFIRMADO")
+  method       String     @default("TRANSFERENCIA")
+  reference    String?
+  notes        String?
+  paidAt       DateTime   @default(now())
+  recordedById String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  recordedBy   User?      @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
 }

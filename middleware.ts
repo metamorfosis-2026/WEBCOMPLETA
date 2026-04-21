@@ -1,26 +1,34 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { NextResponse, type NextRequest } from 'next/server';
 
-export default async function middleware(req: NextRequest) {
-  const pathname = req.nextUrl.pathname;
+import { updateSession } from '@/app/lib/supabase/middleware';
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+const PROTECTED_MATCHERS = ['/dashboard', '/admin'];
 
-  if (!token) {
-    const url = new URL('/login', req.nextUrl.origin);
-    url.searchParams.set('from', pathname);
-    return NextResponse.redirect(url);
-  }
+export default async function middleware(request: NextRequest) {
+  const response = await updateSession(request);
+  const pathname = request.nextUrl.pathname;
 
-  if (pathname.startsWith('/admin')) {
-    const role = (token as unknown as { role?: string }).role;
-    if (role !== 'ADMIN') return NextResponse.redirect(new URL('/dashboard', req.nextUrl.origin));
-  }
+  const isProtected = PROTECTED_MATCHERS.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
 
-  return NextResponse.next();
+  if (!isProtected) return response;
+
+  const hasSessionCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token'));
+
+  if (hasSessionCookie) return response;
+
+  const url = new URL('/login', request.nextUrl.origin);
+  url.searchParams.set('from', pathname);
+  return NextResponse.redirect(url);
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/admin/:path*',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };

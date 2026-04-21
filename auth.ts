@@ -1,167 +1,185 @@
-import NextAuth, { type NextAuthOptions } from 'next-auth';
-import { getServerSession } from 'next-auth/next';
-import Google from 'next-auth/providers/google';
-import Credentials from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import bcrypt from 'bcryptjs';
+import { cache } from 'react';
 import { nanoid } from 'nanoid';
+import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 import { prisma } from './app/lib/prisma';
+import {
+  DEFAULT_SUPERADMIN_EMAIL,
+  normalizeEmail,
+  normalizeRole,
+  normalizeUserStatus,
+} from './app/lib/metamorfosis';
+import { hasSupabaseEnv } from './app/lib/supabase/config';
+import { createClient } from './app/lib/supabase/server';
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-function getSuperadminEmails() {
+function getAdminEmails() {
   const emails = new Set<string>();
 
-  const owner = process.env.OWNER_EMAIL;
-  if (owner?.trim()) emails.add(normalizeEmail(owner));
-
-  const extraAdmins = process.env.SUPERADMIN_EMAILS ?? '';
-  for (const email of extraAdmins.split(',')) {
-    const normalized = email.trim();
-    if (normalized) emails.add(normalizeEmail(normalized));
+  for (const email of (process.env.ADMIN_EMAILS ?? '').split(',')) {
+    const normalized = normalizeEmail(email);
+    if (normalized) emails.add(normalized);
   }
 
   return emails;
 }
 
-function isSuperadminEmail(email?: string | null) {
-  if (!email) return false;
-  return getSuperadminEmails().has(normalizeEmail(email));
+function getSuperadminEmails() {
+  const emails = new Set<string>([DEFAULT_SUPERADMIN_EMAIL]);
+
+  const owner = normalizeEmail(process.env.OWNER_EMAIL);
+  if (owner) emails.add(owner);
+
+  for (const email of (process.env.SUPERADMIN_EMAILS ?? '').split(',')) {
+    const normalized = normalizeEmail(email);
+    if (normalized) emails.add(normalized);
+  }
+
+  return emails;
 }
 
-export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
-  session: { strategy: 'jwt' },
-  pages: {
-    signIn: '/login',
-  },
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      allowDangerousEmailAccountLinking: false,
-    }),
-    Credentials({
-      name: 'Email y contraseña',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Contraseña', type: 'password' },
-      },
-      async authorize(credentials) {
-        const email = credentials?.email ? normalizeEmail(credentials.email) : '';
-        const password = credentials?.password ?? '';
-        if (!email || !password) return null;
+function getConfiguredRole(email: string) {
+  if (getSuperadminEmails().has(email)) return 'SUPERADMIN' as const;
+  if (getAdminEmails().has(email)) return 'ADMIN' as const;
+  return null;
+}
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user?.passwordHash) return null;
+function getDisplayName(user: SupabaseAuthUser) {
+  const metadataName =
+    user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.user_metadata?.user_name ?? null;
+  const normalized = String(metadataName ?? '').trim();
+  return normalized || null;
+}
 
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+async function generateReferralCode() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = nanoid(10);
+    const existing = await prisma.user.findUnique({
+      where: { referralCode: code },
+      select: { id: true },
+    });
 
-        return user;
-      },
-    }),
-  ],
-  callbacks: {
-    async signIn({ user }) {
-      if (user.id && user.email) {
-        const role = isSuperadminEmail(user.email) ? 'ADMIN' : 'USER';
+    if (!existing) return code;
+  }
 
-        try {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { role },
-          });
-        } catch {
-          // ignore
-        }
-      }
+  throw new Error('REFERRAL_CODE_GENERATION_FAILED');
+}
 
-      return true;
+async function resolveReferralUserId(refCode?: string | null, excludedUserId?: string | null) {
+  const normalizedRefCode = String(refCode ?? '').trim();
+  if (!normalizedRefCode) return null;
+
+  const referrer = await prisma.user.findUnique({
+    where: { referralCode: normalizedRefCode },
+    select: { id: true },
+  });
+
+  if (!referrer?.id) return null;
+  if (excludedUserId && referrer.id === excludedUserId) return null;
+
+  return referrer.id;
+}
+
+function resolveRole(email: string, currentRole?: string | null) {
+  const configuredRole = getConfiguredRole(email);
+  if (configuredRole) return configuredRole;
+
+  const normalizedCurrent = normalizeRole(currentRole);
+  if (normalizedCurrent === 'SUPERADMIN' || normalizedCurrent === 'ADMIN') {
+    return normalizedCurrent;
+  }
+
+  return 'USER' as const;
+}
+
+async function upsertAppUserFromSupabaseUser(user: SupabaseAuthUser, refCode?: string | null) {
+  const email = normalizeEmail(user.email);
+  if (!email) return null;
+
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [{ supabaseAuthId: user.id }, { email }],
     },
-    async jwt({ token, user }) {
-      const userId = (user?.id as string | undefined) ?? (token.id as string | undefined);
-      if (!userId) return token;
+  });
 
-      const dbUser = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { email: true, role: true, status: true, referralCode: true, pointsBalance: true },
-      });
+  const role = resolveRole(email, existing?.role);
+  const referredById =
+    existing?.referredById ?? (await resolveReferralUserId(refCode, existing?.id ?? null));
 
-      const resolvedRole = isSuperadminEmail(dbUser?.email) ? 'ADMIN' : 'USER';
+  const data = {
+    supabaseAuthId: user.id,
+    email,
+    name: getDisplayName(user) ?? existing?.name ?? null,
+    image: String(user.user_metadata?.avatar_url ?? existing?.image ?? '') || null,
+    emailVerified: user.email_confirmed_at ? new Date(user.email_confirmed_at) : existing?.emailVerified ?? null,
+    role,
+    status: normalizeUserStatus(existing?.status),
+    referralCode: existing?.referralCode ?? (await generateReferralCode()),
+    referredById,
+  };
 
-      token.id = userId;
-      token.role = resolvedRole;
-      token.status = (dbUser?.status ?? 'INTERESADO') as
-        | 'INTERESADO'
-        | 'FASE_1'
-        | 'PROCESO_ACTIVO'
-        | 'EGRESADO';
-      token.referralCode = dbUser?.referralCode ?? null;
-      token.pointsBalance = dbUser?.pointsBalance ?? 0;
+  if (existing) {
+    const hasChanges =
+      existing.supabaseAuthId !== data.supabaseAuthId ||
+      existing.email !== data.email ||
+      existing.name !== data.name ||
+      existing.image !== data.image ||
+      String(existing.emailVerified ?? '') !== String(data.emailVerified ?? '') ||
+      existing.role !== data.role ||
+      existing.status !== data.status ||
+      existing.referralCode !== data.referralCode ||
+      existing.referredById !== data.referredById;
 
-      return token;
+    if (!hasChanges) {
+      return existing;
+    }
+
+    return prisma.user.update({
+      where: { id: existing.id },
+      data,
+    });
+  }
+
+  return prisma.user.create({
+    data: {
+      ...data,
+      pointsBalance: 0,
     },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = String(token.id ?? '');
-        session.user.role = (token.role ?? 'USER') as 'USER' | 'ADMIN';
-        session.user.status = (token.status ?? 'INTERESADO') as
-          | 'INTERESADO'
-          | 'FASE_1'
-          | 'PROCESO_ACTIVO'
-          | 'EGRESADO';
-        session.user.referralCode = (token.referralCode ?? null) as string | null;
-        session.user.pointsBalance = Number(token.pointsBalance ?? 0);
-      }
-      return session;
+  });
+}
+
+export async function syncSupabaseAuthUser(user: SupabaseAuthUser, options?: { refCode?: string | null }) {
+  if (!user?.email) return null;
+  return upsertAppUserFromSupabaseUser(user, options?.refCode);
+}
+
+export async function syncAuthenticatedUser(options?: { refCode?: string | null }) {
+  if (!hasSupabaseEnv()) return null;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user?.email) return null;
+
+  return syncSupabaseAuthUser(user, options);
+}
+
+export const auth = cache(async () => {
+  const appUser = await syncAuthenticatedUser();
+  if (!appUser) return null;
+
+  return {
+    user: {
+      id: appUser.id,
+      supabaseAuthId: appUser.supabaseAuthId,
+      name: appUser.name,
+      email: appUser.email,
+      image: appUser.image,
+      role: normalizeRole(appUser.role),
+      status: normalizeUserStatus(appUser.status),
+      referralCode: appUser.referralCode ?? null,
+      pointsBalance: appUser.pointsBalance ?? 0,
     },
-  },
-  events: {
-    async createUser({ user }) {
-      // Ensure referralCode exists for OAuth-created users
-      if (!user.id) return;
-      const existing = await prisma.user.findUnique({ where: { id: user.id } });
-      if (existing?.referralCode) {
-        if (user.email && existing.role !== (isSuperadminEmail(user.email) ? 'ADMIN' : 'USER')) {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { role: isSuperadminEmail(user.email) ? 'ADMIN' : 'USER' },
-          });
-        }
-        return;
-      }
-
-      const role = isSuperadminEmail(user.email) ? 'ADMIN' : 'USER';
-
-      // Retry a few times in case of unique collision
-      for (let i = 0; i < 3; i++) {
-        const code = nanoid(10);
-        try {
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { referralCode: code },
-          });
-          break;
-        } catch {
-          // try again
-        }
-      }
-
-      if (existing?.role !== role) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { role },
-        });
-      }
-    },
-  },
-};
-
-export const auth = () => getServerSession(authOptions);
-
-// Route handler for App Router (GET/POST) is defined in app/api/auth/[...nextauth]/route.ts
-
+  };
+});
