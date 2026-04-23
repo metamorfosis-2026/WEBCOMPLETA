@@ -412,6 +412,22 @@ export async function createEdition(values: {
   return mapEdition(data);
 }
 
+export async function updateEdition(
+  id: string,
+  values: Partial<DbEdition> & { title?: string; sequence?: number; notes?: string | null; is_current?: boolean }
+) {
+  const supabase = createAdminClient();
+
+  if (values.is_current) {
+    const { error: resetError } = await supabase.from('editions').update({ is_current: false }).neq('id', id);
+    assertNoError(resetError);
+  }
+
+  const { data, error } = await supabase.from('editions').update(values).eq('id', id).select('*').single<DbEdition>();
+  assertNoError(error);
+  return mapEdition(data);
+}
+
 export async function createEditionPhase(values: {
   edition_id: string;
   slug: string;
@@ -423,6 +439,21 @@ export async function createEditionPhase(values: {
   const { data, error } = await supabase
     .from('edition_phases')
     .insert(values)
+    .select('*')
+    .single<DbEditionPhase>();
+  assertNoError(error);
+  return mapEditionPhase(data);
+}
+
+export async function updateEditionPhase(
+  id: string,
+  values: Partial<DbEditionPhase> & { title?: string; sequence?: number; notes?: string | null }
+) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('edition_phases')
+    .update(values)
+    .eq('id', id)
     .select('*')
     .single<DbEditionPhase>();
   assertNoError(error);

@@ -19,6 +19,8 @@ import {
   createAdminEditionPhase,
   linkUserReferrer,
   recordPayment,
+  updateAdminEdition,
+  updateAdminEditionPhase,
   updateUserStatus,
   upsertEnrollment,
 } from './actions';
@@ -150,6 +152,43 @@ function SummaryCard({
       <p className="text-xs font-bold tracking-wide text-emerald-200/90">{label}</p>
       <p className="mt-2 text-lg font-semibold text-white">{value}</p>
       {help ? <p className="mt-2 text-xs text-white/50">{help}</p> : null}
+    </div>
+  );
+}
+
+function PaymentProgress({
+  paid,
+  due,
+  currency,
+}: {
+  paid: number;
+  due: number;
+  currency: string;
+}) {
+  const safeDue = Math.max(due, 0);
+  const safePaid = Math.max(paid, 0);
+  const progress = safeDue > 0 ? Math.min(Math.round((safePaid / safeDue) * 100), 100) : 0;
+  const remaining = Math.max(safeDue - safePaid, 0);
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3 text-xs text-white/60">
+        <span>{progress}% pago</span>
+        <span>
+          {formatMoney(safePaid, currency)} / {formatMoney(safeDue, currency)}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full rounded-full transition-all ${
+            progress >= 100 ? 'bg-emerald-400' : progress >= 60 ? 'bg-cyan-400' : 'bg-amber-300'
+          }`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="text-xs text-white/50">
+        {remaining > 0 ? `Debe ${formatMoney(remaining, currency)}` : 'Pago completo'}
+      </div>
     </div>
   );
 }
@@ -460,6 +499,13 @@ export default async function AdminPage({
                             Al dia
                           </span>
                         </div>
+                        <div className="mt-3">
+                          <PaymentProgress
+                            paid={sumConfirmedPayments(enrollment.payments)}
+                            due={enrollment.amountDueCents}
+                            currency={enrollment.currency}
+                          />
+                        </div>
                         <p className="mt-3 text-sm text-white/70">
                           Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Cobrado:{' '}
                           {formatMoney(sumConfirmedPayments(enrollment.payments), enrollment.currency)}
@@ -493,6 +539,13 @@ export default async function AdminPage({
                             <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-semibold text-amber-100">
                               Debe {formatMoney(pending, enrollment.currency)}
                             </span>
+                          </div>
+                          <div className="mt-3">
+                            <PaymentProgress
+                              paid={paid}
+                              due={enrollment.amountDueCents}
+                              currency={enrollment.currency}
+                            />
                           </div>
                           <p className="mt-3 text-sm text-white/70">
                             Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Cobrado:{' '}
@@ -778,6 +831,10 @@ export default async function AdminPage({
                               Cargar pago
                             </button>
                           </form>
+                        </div>
+
+                        <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+                          <PaymentProgress paid={paid} due={enrollment.amountDueCents} currency={enrollment.currency} />
                         </div>
 
                         {enrollment.payments.length ? (
@@ -1105,28 +1162,84 @@ export default async function AdminPage({
               <div className="grid gap-4">
                 {editions.map((edition) => (
                   <div key={edition.id} className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white/90">{edition.title}</p>
-                        <p className="mt-1 text-xs text-white/50">
-                          Secuencia {edition.sequence}
-                          {edition.isCurrent ? ' - actual' : ''}
-                        </p>
-                        {edition.notes ? <p className="mt-2 text-sm text-white/60">{edition.notes}</p> : null}
+                    <form action={updateAdminEdition} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+                      <input type="hidden" name="editionId" value={edition.id} />
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-white/90">Editar {edition.title}</p>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
+                          {edition.enrollments.length} ficha(s)
+                        </span>
                       </div>
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
-                        {edition.enrollments.length} ficha(s)
-                      </span>
-                    </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <label className="grid gap-1">
+                          <span className="text-xs text-white/60">Titulo</span>
+                          <input
+                            name="title"
+                            defaultValue={edition.title}
+                            className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-xs text-white/60">Secuencia</span>
+                          <input
+                            name="sequence"
+                            type="number"
+                            defaultValue={edition.sequence}
+                            className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                      </div>
+                      <label className="grid gap-1">
+                        <span className="text-xs text-white/60">Notas</span>
+                        <input
+                          name="notes"
+                          defaultValue={edition.notes ?? ''}
+                          className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                        />
+                      </label>
+                      <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                        <input name="isCurrent" type="checkbox" defaultChecked={edition.isCurrent} className="accent-emerald-400" />
+                        Marcar como edicion actual
+                      </label>
+                      <button
+                        type="submit"
+                        className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+                      >
+                        Guardar edicion
+                      </button>
+                    </form>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {edition.phases.length ? (
                         edition.phases.map((phase) => (
-                          <span
+                          <form
                             key={phase.id}
-                            className="rounded-full border border-white/10 bg-slate-950/70 px-3 py-1 text-xs text-white/70"
+                            action={updateAdminEditionPhase}
+                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1.4fr,120px,1fr,auto]"
                           >
-                            {phase.title}
-                          </span>
+                            <input type="hidden" name="phaseId" value={phase.id} />
+                            <input
+                              name="title"
+                              defaultValue={phase.title}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                            <input
+                              name="sequence"
+                              type="number"
+                              defaultValue={phase.sequence}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                            <input
+                              name="notes"
+                              defaultValue={phase.notes ?? ''}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                            <button
+                              type="submit"
+                              className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+                            >
+                              Guardar
+                            </button>
+                          </form>
                         ))
                       ) : (
                         <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs text-amber-100">

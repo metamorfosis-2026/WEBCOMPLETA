@@ -23,6 +23,8 @@ import {
   insertPointsTransaction,
   insertStatusEvent,
   saveEnrollment,
+  updateEdition,
+  updateEditionPhase,
   updateUser,
 } from '@/app/lib/supabase/db';
 
@@ -111,6 +113,50 @@ export async function createAdminEditionPhase(formData: FormData) {
     title,
     sequence,
     slug: baseSlug,
+    notes,
+  });
+
+  refreshAdminViews();
+}
+
+export async function updateAdminEdition(formData: FormData) {
+  await requireAdminSession();
+
+  const id = String(formData.get('editionId') ?? '').trim();
+  const title = String(formData.get('title') ?? '').trim();
+  const sequence = Number(String(formData.get('sequence') ?? '').trim());
+  const notes = String(formData.get('notes') ?? '').trim() || null;
+  const isCurrent = String(formData.get('isCurrent') ?? '') === 'on';
+
+  if (!id || !title || !Number.isFinite(sequence)) {
+    throw new Error('INVALID_EDITION');
+  }
+
+  await updateEdition(id, {
+    title,
+    sequence,
+    notes,
+    is_current: isCurrent,
+  });
+
+  refreshAdminViews();
+}
+
+export async function updateAdminEditionPhase(formData: FormData) {
+  await requireAdminSession();
+
+  const id = String(formData.get('phaseId') ?? '').trim();
+  const title = String(formData.get('title') ?? '').trim();
+  const sequence = Number(String(formData.get('sequence') ?? '').trim());
+  const notes = String(formData.get('notes') ?? '').trim() || null;
+
+  if (!id || !title || !Number.isFinite(sequence)) {
+    throw new Error('INVALID_PHASE');
+  }
+
+  await updateEditionPhase(id, {
+    title,
+    sequence,
     notes,
   });
 
