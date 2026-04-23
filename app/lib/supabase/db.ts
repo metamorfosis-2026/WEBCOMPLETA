@@ -38,10 +38,22 @@ export type DbEdition = {
   updated_at: string;
 };
 
+export type DbEditionPhase = {
+  id: string;
+  edition_id: string;
+  slug: string;
+  title: string;
+  sequence: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DbEnrollment = {
   id: string;
   user_id: string;
   edition_id: string;
+  phase_id: string | null;
   status: string;
   amount_due_cents: number;
   currency: string;
@@ -125,12 +137,26 @@ export function mapEnrollment(enrollment: DbEnrollment) {
     id: enrollment.id,
     userId: enrollment.user_id,
     editionId: enrollment.edition_id,
+    phaseId: enrollment.phase_id,
     status: enrollment.status,
     amountDueCents: Number(enrollment.amount_due_cents ?? 0),
     currency: enrollment.currency,
     notes: enrollment.notes,
     createdAt: enrollment.created_at,
     updatedAt: enrollment.updated_at,
+  };
+}
+
+export function mapEditionPhase(phase: DbEditionPhase) {
+  return {
+    id: phase.id,
+    editionId: phase.edition_id,
+    slug: phase.slug,
+    title: phase.title,
+    sequence: Number(phase.sequence),
+    notes: phase.notes,
+    createdAt: phase.created_at,
+    updatedAt: phase.updated_at,
   };
 }
 
@@ -235,11 +261,29 @@ export async function listEditions() {
   return (data ?? []).map(mapEdition);
 }
 
+export async function listEditionPhases() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('edition_phases').select('*').order('sequence', { ascending: true });
+  assertNoError(error);
+  return (data ?? []).map(mapEditionPhase);
+}
+
 export async function getEditionById(id: string) {
   const supabase = createAdminClient();
   const { data, error } = await supabase.from('editions').select('*').eq('id', id).maybeSingle<DbEdition>();
   assertNoError(error);
   return data ? mapEdition(data) : null;
+}
+
+export async function getEditionPhaseById(id: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('edition_phases')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle<DbEditionPhase>();
+  assertNoError(error);
+  return data ? mapEditionPhase(data) : null;
 }
 
 export async function listEnrollments() {
@@ -311,6 +355,28 @@ export async function getEnrollmentByUserAndEdition(userId: string, editionId: s
     .select('*')
     .eq('user_id', userId)
     .eq('edition_id', editionId)
+    .is('phase_id', null)
+    .maybeSingle<DbEnrollment>();
+  assertNoError(error);
+  return data ? mapEnrollment(data) : null;
+}
+
+export async function getEnrollmentByUserEditionAndPhase(
+  userId: string,
+  editionId: string,
+  phaseId: string | null
+) {
+  if (!phaseId) {
+    return getEnrollmentByUserAndEdition(userId, editionId);
+  }
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('enrollments')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('edition_id', editionId)
+    .eq('phase_id', phaseId)
     .maybeSingle<DbEnrollment>();
   assertNoError(error);
   return data ? mapEnrollment(data) : null;
@@ -327,6 +393,42 @@ export async function upsertEdition(values: Partial<DbEdition> & { slug: string;
   return mapEdition(data);
 }
 
+export async function createEdition(values: {
+  slug: string;
+  title: string;
+  sequence: number;
+  is_current?: boolean;
+  notes?: string | null;
+}) {
+  const supabase = createAdminClient();
+
+  if (values.is_current) {
+    const { error: resetError } = await supabase.from('editions').update({ is_current: false }).neq('id', '');
+    assertNoError(resetError);
+  }
+
+  const { data, error } = await supabase.from('editions').insert(values).select('*').single<DbEdition>();
+  assertNoError(error);
+  return mapEdition(data);
+}
+
+export async function createEditionPhase(values: {
+  edition_id: string;
+  slug: string;
+  title: string;
+  sequence: number;
+  notes?: string | null;
+}) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('edition_phases')
+    .insert(values)
+    .select('*')
+    .single<DbEditionPhase>();
+  assertNoError(error);
+  return mapEditionPhase(data);
+}
+
 export async function insertStatusEvent(values: Partial<DbStatusEvent> & { user_id: string; from_status: string; to_status: string }) {
   const supabase = createAdminClient();
   const { error } = await supabase.from('user_status_events').insert(values);
@@ -339,8 +441,14 @@ export async function insertPointsTransaction(values: Partial<DbPointsTransactio
   assertNoError(error);
 }
 
-export async function saveEnrollment(values: Partial<DbEnrollment> & { user_id: string; edition_id: string }) {
-  const existing = await getEnrollmentByUserAndEdition(values.user_id, values.edition_id);
+export async function saveEnrollment(
+  values: Partial<DbEnrollment> & { user_id: string; edition_id: string; phase_id?: string | null }
+) {
+  const existing = await getEnrollmentByUserEditionAndPhase(
+    values.user_id,
+    values.edition_id,
+    values.phase_id ?? null
+  );
   const supabase = createAdminClient();
 
   if (existing) {

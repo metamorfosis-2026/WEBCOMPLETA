@@ -14,7 +14,14 @@ import {
   sumConfirmedPayments,
 } from '@/app/lib/metamorfosis';
 import { getAdminData } from '@/app/lib/supabase/views';
-import { linkUserReferrer, recordPayment, updateUserStatus, upsertEnrollment } from './actions';
+import {
+  createAdminEdition,
+  createAdminEditionPhase,
+  linkUserReferrer,
+  recordPayment,
+  updateUserStatus,
+  upsertEnrollment,
+} from './actions';
 
 type TreeNode = {
   id: string;
@@ -105,9 +112,19 @@ function renderTree(node: TreeNode, depth: number, maxDepth: number | null) {
   );
 }
 
-function buildEditionHref(slug: string, q: string, levelParam: string) {
+function buildEditionHref(slug: string, q: string, levelParam: string, phase?: string) {
   const params = new URLSearchParams();
   if (slug) params.set('edition', slug);
+  if (q.trim()) params.set('q', q.trim());
+  if (levelParam) params.set('level', levelParam);
+  if (phase) params.set('phase', phase);
+  return `/admin?${params.toString()}`;
+}
+
+function buildPhaseHref(editionSlug: string, phaseSlug: string, q: string, levelParam: string) {
+  const params = new URLSearchParams();
+  if (editionSlug) params.set('edition', editionSlug);
+  if (phaseSlug) params.set('phase', phaseSlug);
   if (q.trim()) params.set('q', q.trim());
   if (levelParam) params.set('level', levelParam);
   return `/admin?${params.toString()}`;
@@ -116,7 +133,7 @@ function buildEditionHref(slug: string, q: string, levelParam: string) {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { q?: string; level?: string; edition?: string };
+  searchParams?: { q?: string; level?: string; edition?: string; phase?: string };
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
@@ -133,6 +150,10 @@ export default async function AdminPage({
     editions.find((edition) => edition.slug === searchParams?.edition) ??
     editions.find((edition) => edition.isCurrent) ??
     editions[0];
+  const selectedPhase =
+    selectedEdition?.phases.find((phase) => phase.slug === searchParams?.phase) ??
+    selectedEdition?.phases[0] ??
+    null;
 
   const usersForManagement = q.trim() ? users.filter((user) => matchesQuery(user, q)) : users;
 
@@ -169,8 +190,11 @@ export default async function AdminPage({
     : roots;
 
   const editionParticipants = selectedEdition?.enrollments ?? [];
-  const totalDue = editionParticipants.reduce((sum, enrollment) => sum + enrollment.amountDueCents, 0);
-  const totalPaid = editionParticipants.reduce(
+  const phaseParticipants = selectedPhase
+    ? editionParticipants.filter((enrollment) => enrollment.phase?.id === selectedPhase.id)
+    : [];
+  const totalDue = phaseParticipants.reduce((sum, enrollment) => sum + enrollment.amountDueCents, 0);
+  const totalPaid = phaseParticipants.reduce(
     (sum, enrollment) => sum + sumConfirmedPayments(enrollment.payments),
     0
   );
@@ -192,6 +216,93 @@ export default async function AdminPage({
         </div>
 
         <div className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-7">
+          <div className="grid gap-4 rounded-3xl border border-white/10 bg-black/20 p-5 lg:grid-cols-[1.2fr,1fr]">
+            <form action={createAdminEdition} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+              <p className="text-sm font-semibold text-white/80">Crear nueva edicion</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Titulo</span>
+                  <input
+                    name="title"
+                    required
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="Edicion 7"
+                  />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Secuencia</span>
+                  <input
+                    name="sequence"
+                    required
+                    type="number"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="7"
+                  />
+                </label>
+              </div>
+              <label className="grid gap-1">
+                <span className="text-xs text-white/60">Notas</span>
+                <input
+                  name="notes"
+                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                  placeholder="Descripcion corta de la edicion"
+                />
+              </label>
+              <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                <input name="isCurrent" type="checkbox" className="accent-emerald-400" />
+                Marcar como edicion actual
+              </label>
+              <button
+                type="submit"
+                className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+              >
+                Crear edicion
+              </button>
+            </form>
+
+            {selectedEdition ? (
+              <form action={createAdminEditionPhase} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+                <input type="hidden" name="editionId" value={selectedEdition.id} />
+                <p className="text-sm font-semibold text-white/80">Agregar fase a {selectedEdition.title}</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-white/60">Titulo</span>
+                    <input
+                      name="title"
+                      required
+                      className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                      placeholder="Fase 1"
+                    />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-white/60">Secuencia</span>
+                    <input
+                      name="sequence"
+                      required
+                      type="number"
+                      className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                      placeholder="1"
+                    />
+                  </label>
+                </div>
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Notas</span>
+                  <input
+                    name="notes"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="Notas de esta fase"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+                >
+                  Crear fase
+                </button>
+              </form>
+            ) : null}
+          </div>
+
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold">Pagos por edicion</h2>
@@ -219,6 +330,30 @@ export default async function AdminPage({
 
           {selectedEdition ? (
             <>
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2">
+                  {selectedEdition.phases.length ? (
+                    selectedEdition.phases.map((phase) => (
+                      <Link
+                        key={phase.id}
+                        href={buildPhaseHref(selectedEdition.slug, phase.slug, q, levelParam)}
+                        className={`rounded-full border px-4 py-2 text-sm transition ${
+                          selectedPhase?.id === phase.id
+                            ? 'border-emerald-400/60 bg-emerald-400/15 text-white'
+                            : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        {phase.title}
+                      </Link>
+                    ))
+                  ) : (
+                    <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-4 py-2 text-sm text-amber-100">
+                      Esta edicion todavia no tiene fases. Crea una arriba para empezar.
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="mt-6 grid gap-3 md:grid-cols-4">
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <p className="text-xs font-bold tracking-wide text-emerald-200/90">EDICION</p>
@@ -226,23 +361,26 @@ export default async function AdminPage({
                   <p className="mt-2 text-xs text-white/50">{selectedEdition.notes ?? 'Sin notas aun.'}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-bold tracking-wide text-emerald-200/90">FASE</p>
+                  <p className="mt-2 text-lg font-semibold text-white">{selectedPhase?.title ?? 'Sin fase'}</p>
+                  <p className="mt-2 text-xs text-white/50">{selectedPhase?.notes ?? 'Selecciona o crea una fase.'}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <p className="text-xs font-bold tracking-wide text-emerald-200/90">PARTICIPANTES</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{editionParticipants.length}</p>
+                  <p className="mt-2 text-lg font-semibold text-white">{phaseParticipants.length}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-bold tracking-wide text-emerald-200/90">PAGADO</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{formatMoney(totalPaid)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-bold tracking-wide text-emerald-200/90">PENDIENTE</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{formatMoney(totalPending)}</p>
+                  <p className="text-xs font-bold tracking-wide text-emerald-200/90">PAGADO / PENDIENTE</p>
+                  <p className="mt-2 text-lg font-semibold text-white">
+                    {formatMoney(totalPaid)} / {formatMoney(totalPending)}
+                  </p>
                 </div>
               </div>
 
               <div className="mt-8 rounded-3xl border border-white/10 bg-black/20 p-5">
-                <h3 className="text-base font-semibold">Asignar participante a esta edicion</h3>
+                <h3 className="text-base font-semibold">Asignar participante a una fase</h3>
                 <p className="mt-2 text-sm text-white/60">
-                  Carga el monto total y el estado inicial. Si la persona ya estaba asignada, se actualiza.
+                  El mismo usuario puede estar en varias fases de la misma edicion. Cada fase guarda sus pagos por separado.
                 </p>
 
                 <form action={upsertEnrollment} className="mt-5 grid gap-3 lg:grid-cols-4">
@@ -262,6 +400,25 @@ export default async function AdminPage({
                       {users.map((user) => (
                         <option key={user.id} value={user.id}>
                           {(user.name ?? 'Sin nombre') + (user.email ? ` - ${user.email}` : '')}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1">
+                    <span className="text-xs text-white/60">Fase</span>
+                    <select
+                      name="phaseId"
+                      required
+                      className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                      defaultValue={selectedPhase?.id ?? ''}
+                    >
+                      <option value="" disabled>
+                        Seleccionar fase
+                      </option>
+                      {selectedEdition.phases.map((phase) => (
+                        <option key={phase.id} value={phase.id}>
+                          {phase.title}
                         </option>
                       ))}
                     </select>
@@ -316,8 +473,8 @@ export default async function AdminPage({
               </div>
 
               <div className="mt-6 grid gap-4">
-                {editionParticipants.length ? (
-                  editionParticipants.map((enrollment) => {
+                {phaseParticipants.length ? (
+                  phaseParticipants.map((enrollment) => {
                     const paid = sumConfirmedPayments(enrollment.payments);
                     const pending = Math.max(enrollment.amountDueCents - paid, 0);
 
@@ -342,6 +499,7 @@ export default async function AdminPage({
                               </p>
                             ) : null}
                             <p className="mt-3 text-sm text-white/60">
+                              {enrollment.phase ? `${enrollment.phase.title} - ` : ''}
                               Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Pagado:{' '}
                               {formatMoney(paid, enrollment.currency)} - Pendiente:{' '}
                               {formatMoney(pending, enrollment.currency)}
@@ -357,9 +515,12 @@ export default async function AdminPage({
                           <form action={upsertEnrollment} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                             <input type="hidden" name="userId" value={enrollment.userId} />
                             <input type="hidden" name="editionId" value={enrollment.editionId} />
+                            <input type="hidden" name="phaseId" value={enrollment.phase?.id ?? ''} />
                             <input type="hidden" name="currency" value={enrollment.currency} />
 
-                            <p className="text-sm font-semibold text-white/80">Actualizar ficha de la edicion</p>
+                            <p className="text-sm font-semibold text-white/80">
+                              Actualizar ficha de {enrollment.phase?.title ?? 'la fase'}
+                            </p>
 
                             <div className="grid gap-3 md:grid-cols-2">
                               <label className="grid gap-1">
@@ -525,7 +686,9 @@ export default async function AdminPage({
                   })
                 ) : (
                   <p className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-white/70">
-                    Esta edicion todavia no tiene participantes cargados.
+                    {selectedPhase
+                      ? 'Esta fase todavia no tiene participantes cargados.'
+                      : 'Crea una fase para empezar a cargar participantes.'}
                   </p>
                 )}
               </div>
@@ -635,6 +798,7 @@ export default async function AdminPage({
                             className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/70"
                           >
                             {enrollment.edition.title}
+                            {enrollment.phase ? ` - ${enrollment.phase.title}` : ''}
                           </span>
                         ))}
                       </div>

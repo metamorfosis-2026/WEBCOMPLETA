@@ -47,18 +47,39 @@ create table if not exists public.editions (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.edition_phases (
+  id uuid primary key default gen_random_uuid(),
+  edition_id uuid not null references public.editions(id) on delete cascade,
+  slug text not null unique,
+  title text not null,
+  sequence integer not null,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (edition_id, sequence)
+);
+
 create table if not exists public.enrollments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
   edition_id uuid not null references public.editions(id) on delete cascade,
+  phase_id uuid references public.edition_phases(id) on delete cascade,
   status text not null default 'PENDIENTE',
   amount_due_cents integer not null default 0,
   currency text not null default 'ARS',
   notes text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (user_id, edition_id)
+  updated_at timestamptz not null default now()
 );
+
+alter table public.enrollments
+add column if not exists phase_id uuid references public.edition_phases(id) on delete cascade;
+
+alter table public.enrollments
+drop constraint if exists enrollments_user_id_edition_id_key;
+
+create unique index if not exists enrollments_user_edition_phase_idx
+on public.enrollments (user_id, edition_id, phase_id);
 
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
@@ -93,6 +114,11 @@ for each row execute function public.set_updated_at();
 drop trigger if exists editions_set_updated_at on public.editions;
 create trigger editions_set_updated_at
 before update on public.editions
+for each row execute function public.set_updated_at();
+
+drop trigger if exists edition_phases_set_updated_at on public.edition_phases;
+create trigger edition_phases_set_updated_at
+before update on public.edition_phases
 for each row execute function public.set_updated_at();
 
 drop trigger if exists enrollments_set_updated_at on public.enrollments;

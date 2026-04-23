@@ -133,6 +133,9 @@ export default async function DashboardPage() {
                           {enrollment.edition.title.toUpperCase()}
                         </p>
                         <p className="mt-2 text-lg font-semibold text-white/90">{enrollment.edition.title}</p>
+                        {enrollment.phase ? (
+                          <p className="mt-2 text-sm font-medium text-emerald-200/90">{enrollment.phase.title}</p>
+                        ) : null}
                         <p className="mt-2 text-sm text-white/60">
                           Total pactado: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Pagado:{' '}
                           {formatMoney(confirmedPaid, enrollment.currency)} - Restante:{' '}

@@ -13,7 +13,10 @@ import {
   parseMoneyToCents,
 } from '@/app/lib/metamorfosis';
 import {
+  createEdition,
+  createEditionPhase,
   getEditionById,
+  getEditionPhaseById,
   getEnrollmentById,
   getUserById,
   insertPayment,
@@ -51,6 +54,67 @@ async function assertNoReferralCycle(userId: string, referredById: string | null
 function refreshAdminViews() {
   revalidatePath('/admin');
   revalidatePath('/dashboard');
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+export async function createAdminEdition(formData: FormData) {
+  await requireAdminSession();
+
+  const title = String(formData.get('title') ?? '').trim();
+  const sequence = Number(String(formData.get('sequence') ?? '').trim());
+  const notes = String(formData.get('notes') ?? '').trim() || null;
+  const isCurrent = String(formData.get('isCurrent') ?? '') === 'on';
+
+  if (!title || !Number.isFinite(sequence)) {
+    throw new Error('INVALID_EDITION');
+  }
+
+  const baseSlug = slugify(title) || `edicion-${sequence}`;
+  await createEdition({
+    title,
+    sequence,
+    slug: baseSlug,
+    notes,
+    is_current: isCurrent,
+  });
+
+  refreshAdminViews();
+}
+
+export async function createAdminEditionPhase(formData: FormData) {
+  await requireAdminSession();
+
+  const editionId = String(formData.get('editionId') ?? '').trim();
+  const title = String(formData.get('title') ?? '').trim();
+  const sequence = Number(String(formData.get('sequence') ?? '').trim());
+  const notes = String(formData.get('notes') ?? '').trim() || null;
+
+  if (!editionId || !title || !Number.isFinite(sequence)) {
+    throw new Error('INVALID_PHASE');
+  }
+
+  const edition = await getEditionById(editionId);
+  if (!edition) throw new Error('NOT_FOUND');
+
+  const baseSlug = `${edition.slug}-${slugify(title) || `fase-${sequence}`}`;
+  await createEditionPhase({
+    edition_id: editionId,
+    title,
+    sequence,
+    slug: baseSlug,
+    notes,
+  });
+
+  refreshAdminViews();
 }
 
 export async function updateUserStatus(formData: FormData) {
@@ -100,20 +164,27 @@ export async function upsertEnrollment(formData: FormData) {
 
   const userId = String(formData.get('userId') ?? '').trim();
   const editionId = String(formData.get('editionId') ?? '').trim();
+  const phaseIdRaw = String(formData.get('phaseId') ?? '').trim();
+  const phaseId = phaseIdRaw || null;
   const status = normalizeEnrollmentStatus(String(formData.get('status') ?? ''));
   const amountDueCents = parseMoneyToCents(String(formData.get('amountDue') ?? '0'));
   const currency = String(formData.get('currency') ?? 'ARS').trim().toUpperCase() || 'ARS';
   const notes = String(formData.get('notes') ?? '').trim() || null;
 
-  if (!userId || !editionId) throw new Error('INVALID_ENROLLMENT');
+  if (!userId || !editionId || !phaseId) throw new Error('INVALID_ENROLLMENT');
 
-  const [user, edition] = await Promise.all([getUserById(userId), getEditionById(editionId)]);
+  const [user, edition, phase] = await Promise.all([
+    getUserById(userId),
+    getEditionById(editionId),
+    getEditionPhaseById(phaseId),
+  ]);
 
-  if (!user || !edition) throw new Error('NOT_FOUND');
+  if (!user || !edition || !phase || phase.editionId !== edition.id) throw new Error('NOT_FOUND');
 
   await saveEnrollment({
     user_id: userId,
     edition_id: editionId,
+    phase_id: phaseId,
     status,
     amount_due_cents: amountDueCents,
     currency,

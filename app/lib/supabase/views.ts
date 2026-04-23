@@ -4,6 +4,7 @@ import {
   getReferredUser,
   getUserById,
   listEditions,
+  listEditionPhases,
   listEnrollments,
   listPayments,
   listPointsTransactionsByUserId,
@@ -16,7 +17,7 @@ export async function getDashboardData(userId: string) {
   const user = await getUserById(userId);
   if (!user) return null;
 
-  const [referredBy, referrals, statusEvents, pointsTransactions, enrollments, editions, payments] =
+  const [referredBy, referrals, statusEvents, pointsTransactions, enrollments, editions, phases, payments] =
     await Promise.all([
       getReferredUser(user.referredById),
       listReferralsByUserIds([user.id]),
@@ -24,6 +25,7 @@ export async function getDashboardData(userId: string) {
       listPointsTransactionsByUserId(user.id, 8),
       listEnrollments(),
       listEditions(),
+      listEditionPhases(),
       listPayments(),
     ]);
 
@@ -38,6 +40,7 @@ export async function getDashboardData(userId: string) {
 
   const userEnrollments = enrollments.filter((entry) => entry.userId === user.id);
   const editionById = new Map(editions.map((edition) => [edition.id, edition]));
+  const phaseById = new Map(phases.map((phase) => [phase.id, phase]));
   const paymentsByEnrollmentId = new Map<string, typeof payments>();
   for (const payment of payments) {
     const bucket = paymentsByEnrollmentId.get(payment.enrollmentId) ?? [];
@@ -57,6 +60,7 @@ export async function getDashboardData(userId: string) {
     enrollments: userEnrollments.map((enrollment) => ({
       ...enrollment,
       edition: editionById.get(enrollment.editionId)!,
+      phase: enrollment.phaseId ? phaseById.get(enrollment.phaseId) ?? null : null,
       payments: (paymentsByEnrollmentId.get(enrollment.id) ?? []).slice(0, 10),
     })),
   };
@@ -65,15 +69,17 @@ export async function getDashboardData(userId: string) {
 export async function getAdminData() {
   await ensureDefaultEditions();
 
-  const [users, editions, enrollments, payments] = await Promise.all([
+  const [users, editions, phases, enrollments, payments] = await Promise.all([
     listUsers(),
     listEditions(),
+    listEditionPhases(),
     listEnrollments(),
     listPayments(),
   ]);
 
   const userById = new Map(users.map((user) => [user.id, user]));
   const editionById = new Map(editions.map((edition) => [edition.id, edition]));
+  const phaseById = new Map(phases.map((phase) => [phase.id, phase]));
   const paymentsByEnrollmentId = new Map<string, typeof payments>();
   for (const payment of payments) {
     const bucket = paymentsByEnrollmentId.get(payment.enrollmentId) ?? [];
@@ -89,6 +95,7 @@ export async function getAdminData() {
       .map((entry) => ({
         ...entry,
         edition: editionById.get(entry.editionId)!,
+        phase: entry.phaseId ? phaseById.get(entry.phaseId) ?? null : null,
       })),
   }));
 
@@ -99,10 +106,14 @@ export async function getAdminData() {
     })
     .map((edition) => ({
       ...edition,
+      phases: phases
+        .filter((phase) => phase.editionId === edition.id)
+        .sort((left, right) => left.sequence - right.sequence),
       enrollments: enrollments
         .filter((entry) => entry.editionId === edition.id)
         .map((entry) => ({
           ...entry,
+          phase: entry.phaseId ? phaseById.get(entry.phaseId) ?? null : null,
           user: {
             ...userById.get(entry.userId)!,
             referredBy: (() => {
