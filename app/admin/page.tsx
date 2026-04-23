@@ -460,8 +460,8 @@ export default async function AdminPage({
 
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <p className="text-xs text-white/50">Objetivo total</p>
-                      <p className="mt-2 text-lg font-semibold text-white">{formatMoney(totalDue)}</p>
+                      <p className="text-xs text-white/50">Total cobrado</p>
+                      <p className="mt-2 text-lg font-semibold text-white">{formatMoney(totalPaid)}</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                       <p className="text-xs text-white/50">Pagos confirmados</p>

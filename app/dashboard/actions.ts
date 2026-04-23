@@ -82,5 +82,6 @@ export async function saveGiftRecipient(formData: FormData) {
   });
 
   revalidatePath('/dashboard');
+  revalidatePath('/regalo');
   revalidatePath('/admin');
 }
