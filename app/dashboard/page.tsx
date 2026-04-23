@@ -24,14 +24,12 @@ export default async function DashboardPage() {
 
   const { user, enrollments, editionSixGift, canGiftEditionSix } = giftState;
   const referralLink = user.referralCode ? `/register?ref=${encodeURIComponent(user.referralCode)}` : null;
-  const giftUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://metamorfosis.vip'}/regalo`;
-
   return (
     <main className="min-h-screen text-white">
       <div className="mx-auto w-full max-w-5xl px-5 py-10">
         {canGiftEditionSix ? (
           <div className="mb-8">
-            <GiftCouponPanel giftInvitation={editionSixGift} directUrl={giftUrl} />
+            <GiftCouponPanel giftInvitation={editionSixGift} />
           </div>
         ) : null}
 

@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { saveGiftRecipient } from '@/app/dashboard/actions';
 
 type GiftInvitation = {
@@ -11,10 +9,8 @@ type GiftInvitation = {
 
 export function GiftCouponPanel({
   giftInvitation,
-  directUrl,
 }: {
   giftInvitation: GiftInvitation;
-  directUrl?: string;
 }) {
   return (
     <section className="overflow-hidden rounded-[2rem] border border-amber-300/30 bg-gradient-to-br from-amber-200/20 via-orange-300/10 to-rose-300/20 shadow-[0_20px_80px_rgba(251,191,36,0.18)]">
@@ -35,16 +31,6 @@ export function GiftCouponPanel({
           Como ya tienes Fase 2 con una seña cargada, aquí puedes dejar los datos de la persona a la que quieres
           invitar. Esto queda guardado para que el equipo lo vea desde admin.
         </p>
-
-        {directUrl ? (
-          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
-            <p className="text-xs font-semibold tracking-wide text-amber-100/80">LINK DIRECTO DEL CUPON</p>
-            <code className="mt-2 block select-all break-all text-xs text-white/75">{directUrl}</code>
-            <p className="mt-2 text-xs text-white/55">
-              Este enlace pide login antes de mostrar el cupón.
-            </p>
-          </div>
-        ) : null}
 
         <form action={saveGiftRecipient} className="mt-6 grid gap-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -96,14 +82,6 @@ export function GiftCouponPanel({
             </button>
           </div>
         </form>
-
-        {!directUrl ? null : (
-          <div className="mt-6 text-sm">
-            <Link className="text-white/70 hover:text-white hover:underline" href="/dashboard">
-              {'<-'} Volver al panel
-            </Link>
-          </div>
-        )}
       </div>
     </section>
   );
