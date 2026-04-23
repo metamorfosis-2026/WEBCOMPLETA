@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
 import {
@@ -98,6 +99,7 @@ export async function createAdminEditionPhase(formData: FormData) {
   const editionId = String(formData.get('editionId') ?? '').trim();
   const title = String(formData.get('title') ?? '').trim();
   const sequence = Number(String(formData.get('sequence') ?? '').trim());
+  const priceCents = parseMoneyToCents(String(formData.get('price') ?? '0'));
   const notes = String(formData.get('notes') ?? '').trim() || null;
 
   if (!editionId || !title || !Number.isFinite(sequence)) {
@@ -113,6 +115,7 @@ export async function createAdminEditionPhase(formData: FormData) {
     title,
     sequence,
     slug: baseSlug,
+    price_cents: priceCents,
     notes,
   });
 
@@ -148,6 +151,7 @@ export async function updateAdminEditionPhase(formData: FormData) {
   const id = String(formData.get('phaseId') ?? '').trim();
   const title = String(formData.get('title') ?? '').trim();
   const sequence = Number(String(formData.get('sequence') ?? '').trim());
+  const priceCents = parseMoneyToCents(String(formData.get('price') ?? '0'));
   const notes = String(formData.get('notes') ?? '').trim() || null;
 
   if (!id || !title || !Number.isFinite(sequence)) {
@@ -157,6 +161,7 @@ export async function updateAdminEditionPhase(formData: FormData) {
   await updateEditionPhase(id, {
     title,
     sequence,
+    price_cents: priceCents,
     notes,
   });
 
@@ -213,9 +218,10 @@ export async function upsertEnrollment(formData: FormData) {
   const phaseIdRaw = String(formData.get('phaseId') ?? '').trim();
   const phaseId = phaseIdRaw || null;
   const status = normalizeEnrollmentStatus(String(formData.get('status') ?? ''));
-  const amountDueCents = parseMoneyToCents(String(formData.get('amountDue') ?? '0'));
+  const amountDueRaw = String(formData.get('amountDue') ?? '0');
   const currency = String(formData.get('currency') ?? 'ARS').trim().toUpperCase() || 'ARS';
   const notes = String(formData.get('notes') ?? '').trim() || null;
+  const returnTab = String(formData.get('returnTab') ?? 'finance').trim() || 'finance';
 
   if (!userId || !editionId || !phaseId) throw new Error('INVALID_ENROLLMENT');
 
@@ -226,6 +232,9 @@ export async function upsertEnrollment(formData: FormData) {
   ]);
 
   if (!user || !edition || !phase || phase.editionId !== edition.id) throw new Error('NOT_FOUND');
+
+  const parsedAmountDueCents = parseMoneyToCents(amountDueRaw);
+  const amountDueCents = parsedAmountDueCents > 0 ? parsedAmountDueCents : Number(phase.priceCents ?? 0);
 
   await saveEnrollment({
     user_id: userId,
@@ -238,6 +247,7 @@ export async function upsertEnrollment(formData: FormData) {
   });
 
   refreshAdminViews();
+  redirect(`/admin?edition=${edition.slug}&phase=${phase.slug}&tab=${encodeURIComponent(returnTab)}`);
 }
 
 export async function recordPayment(formData: FormData) {
@@ -251,12 +261,28 @@ export async function recordPayment(formData: FormData) {
   const reference = String(formData.get('reference') ?? '').trim() || null;
   const notes = String(formData.get('notes') ?? '').trim() || null;
   const paidAtRaw = String(formData.get('paidAt') ?? '').trim();
+  const returnTab = String(formData.get('returnTab') ?? 'finance').trim() || 'finance';
 
   if (!enrollmentId || amountCents <= 0) throw new Error('INVALID_PAYMENT');
 
   const enrollment = await getEnrollmentById(enrollmentId);
 
   if (!enrollment) throw new Error('NOT_FOUND');
+
+  const phase = enrollment.phaseId ? await getEditionPhaseById(enrollment.phaseId) : null;
+  const edition = await getEditionById(enrollment.editionId);
+
+  if (phase && Number(enrollment.amountDueCents ?? 0) <= 0 && Number(phase.priceCents ?? 0) > 0) {
+    await saveEnrollment({
+      user_id: enrollment.userId,
+      edition_id: enrollment.editionId,
+      phase_id: enrollment.phaseId,
+      status: enrollment.status,
+      amount_due_cents: Number(phase.priceCents ?? 0),
+      currency: enrollment.currency,
+      notes: enrollment.notes,
+    });
+  }
 
   await insertPayment({
     enrollment_id: enrollmentId,
@@ -271,6 +297,9 @@ export async function recordPayment(formData: FormData) {
   });
 
   refreshAdminViews();
+  if (edition && phase) {
+    redirect(`/admin?edition=${edition.slug}&phase=${phase.slug}&tab=${encodeURIComponent(returnTab)}`);
+  }
 }
 
 export async function linkUserReferrer(formData: FormData) {

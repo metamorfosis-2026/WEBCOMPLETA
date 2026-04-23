@@ -6,6 +6,7 @@ import {
   listEditions,
   listEditionPhases,
   listEnrollments,
+  listGiftInvitations,
   listPayments,
   listPointsTransactionsByUserId,
   listReferralsByUserIds,
@@ -17,7 +18,7 @@ export async function getDashboardData(userId: string) {
   const user = await getUserById(userId);
   if (!user) return null;
 
-  const [referredBy, referrals, statusEvents, pointsTransactions, enrollments, editions, phases, payments] =
+  const [referredBy, referrals, statusEvents, pointsTransactions, enrollments, editions, phases, payments, giftInvitations] =
     await Promise.all([
       getReferredUser(user.referredById),
       listReferralsByUserIds([user.id]),
@@ -27,6 +28,7 @@ export async function getDashboardData(userId: string) {
       listEditions(),
       listEditionPhases(),
       listPayments(),
+      listGiftInvitations(),
     ]);
 
   const level1 = referrals.slice(0, 50);
@@ -47,6 +49,7 @@ export async function getDashboardData(userId: string) {
     bucket.push(payment);
     paymentsByEnrollmentId.set(payment.enrollmentId, bucket);
   }
+  const userGiftInvitations = giftInvitations.filter((entry) => entry.giverUserId === user.id);
 
   return {
     ...user,
@@ -57,6 +60,10 @@ export async function getDashboardData(userId: string) {
     })),
     statusEvents,
     pointsTransactions,
+    giftInvitations: userGiftInvitations.map((invitation) => ({
+      ...invitation,
+      edition: editionById.get(invitation.editionId) ?? null,
+    })),
     enrollments: userEnrollments.map((enrollment) => ({
       ...enrollment,
       edition: editionById.get(enrollment.editionId)!,
@@ -69,12 +76,13 @@ export async function getDashboardData(userId: string) {
 export async function getAdminData() {
   await ensureDefaultEditions();
 
-  const [users, editions, phases, enrollments, payments] = await Promise.all([
+  const [users, editions, phases, enrollments, payments, giftInvitations] = await Promise.all([
     listUsers(),
     listEditions(),
     listEditionPhases(),
     listEnrollments(),
     listPayments(),
+    listGiftInvitations(),
   ]);
 
   const userById = new Map(users.map((user) => [user.id, user]));
@@ -125,8 +133,15 @@ export async function getAdminData() {
         })),
     }));
 
+  const hydratedGiftInvitations = giftInvitations.map((invitation) => ({
+    ...invitation,
+    edition: editionById.get(invitation.editionId) ?? null,
+    giver: userById.get(invitation.giverUserId) ?? null,
+  }));
+
   return {
     users: hydratedUsers,
     editions: hydratedEditions,
+    giftInvitations: hydratedGiftInvitations,
   };
 }

@@ -44,6 +44,7 @@ export type DbEditionPhase = {
   slug: string;
   title: string;
   sequence: number;
+  price_cents: number;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -93,6 +94,17 @@ export type DbPointsTransaction = {
   reason: string;
   metadata: string | null;
   created_at: string;
+};
+
+export type DbGiftInvitation = {
+  id: string;
+  giver_user_id: string;
+  edition_id: string;
+  recipient_first_name: string;
+  recipient_last_name: string;
+  recipient_phone: string;
+  created_at: string;
+  updated_at: string;
 };
 
 function assertNoError(error: { message: string } | null) {
@@ -154,6 +166,7 @@ export function mapEditionPhase(phase: DbEditionPhase) {
     slug: phase.slug,
     title: phase.title,
     sequence: Number(phase.sequence),
+    priceCents: Number(phase.price_cents ?? 0),
     notes: phase.notes,
     createdAt: phase.created_at,
     updatedAt: phase.updated_at,
@@ -196,6 +209,19 @@ export function mapPointsTransaction(transaction: DbPointsTransaction) {
     reason: transaction.reason,
     metadata: transaction.metadata,
     createdAt: transaction.created_at,
+  };
+}
+
+export function mapGiftInvitation(invitation: DbGiftInvitation) {
+  return {
+    id: invitation.id,
+    giverUserId: invitation.giver_user_id,
+    editionId: invitation.edition_id,
+    recipientFirstName: invitation.recipient_first_name,
+    recipientLastName: invitation.recipient_last_name,
+    recipientPhone: invitation.recipient_phone,
+    createdAt: invitation.created_at,
+    updatedAt: invitation.updated_at,
   };
 }
 
@@ -300,6 +326,16 @@ export async function listPayments() {
   return (data ?? []).map(mapPayment);
 }
 
+export async function listGiftInvitations() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('gift_invitations')
+    .select('*')
+    .order('created_at', { ascending: false });
+  assertNoError(error);
+  return (data ?? []).map(mapGiftInvitation);
+}
+
 export async function listStatusEventsByUserId(userId: string, limit = 8) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -382,6 +418,18 @@ export async function getEnrollmentByUserEditionAndPhase(
   return data ? mapEnrollment(data) : null;
 }
 
+export async function getGiftInvitationByGiverAndEdition(giverUserId: string, editionId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('gift_invitations')
+    .select('*')
+    .eq('giver_user_id', giverUserId)
+    .eq('edition_id', editionId)
+    .maybeSingle<DbGiftInvitation>();
+  assertNoError(error);
+  return data ? mapGiftInvitation(data) : null;
+}
+
 export async function upsertEdition(values: Partial<DbEdition> & { slug: string; title: string; sequence: number }) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -433,6 +481,7 @@ export async function createEditionPhase(values: {
   slug: string;
   title: string;
   sequence: number;
+  price_cents?: number;
   notes?: string | null;
 }) {
   const supabase = createAdminClient();
@@ -447,7 +496,12 @@ export async function createEditionPhase(values: {
 
 export async function updateEditionPhase(
   id: string,
-  values: Partial<DbEditionPhase> & { title?: string; sequence?: number; notes?: string | null }
+  values: Partial<DbEditionPhase> & {
+    title?: string;
+    sequence?: number;
+    price_cents?: number;
+    notes?: string | null;
+  }
 ) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
@@ -503,6 +557,38 @@ export async function insertPayment(values: Partial<DbPayment> & { enrollment_id
   const { data, error } = await supabase.from('payments').insert(values).select('*').single<DbPayment>();
   assertNoError(error);
   return mapPayment(data);
+}
+
+export async function saveGiftInvitation(
+  values: Partial<DbGiftInvitation> & {
+    giver_user_id: string;
+    edition_id: string;
+    recipient_first_name: string;
+    recipient_last_name: string;
+    recipient_phone: string;
+  }
+) {
+  const existing = await getGiftInvitationByGiverAndEdition(values.giver_user_id, values.edition_id);
+  const supabase = createAdminClient();
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('gift_invitations')
+      .update(values)
+      .eq('id', existing.id)
+      .select('*')
+      .single<DbGiftInvitation>();
+    assertNoError(error);
+    return mapGiftInvitation(data);
+  }
+
+  const { data, error } = await supabase
+    .from('gift_invitations')
+    .insert(values)
+    .select('*')
+    .single<DbGiftInvitation>();
+  assertNoError(error);
+  return mapGiftInvitation(data);
 }
 
 export async function generateReferralCode() {

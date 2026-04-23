@@ -53,11 +53,15 @@ create table if not exists public.edition_phases (
   slug text not null unique,
   title text not null,
   sequence integer not null,
+  price_cents integer not null default 0,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (edition_id, sequence)
 );
+
+alter table public.edition_phases
+add column if not exists price_cents integer not null default 0;
 
 create table if not exists public.enrollments (
   id uuid primary key default gen_random_uuid(),
@@ -96,6 +100,20 @@ create table if not exists public.payments (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.gift_invitations (
+  id uuid primary key default gen_random_uuid(),
+  giver_user_id uuid not null references public.users(id) on delete cascade,
+  edition_id uuid not null references public.editions(id) on delete cascade,
+  recipient_first_name text not null,
+  recipient_last_name text not null,
+  recipient_phone text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists gift_invitations_giver_edition_idx
+on public.gift_invitations (giver_user_id, edition_id);
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -129,4 +147,9 @@ for each row execute function public.set_updated_at();
 drop trigger if exists payments_set_updated_at on public.payments;
 create trigger payments_set_updated_at
 before update on public.payments
+for each row execute function public.set_updated_at();
+
+drop trigger if exists gift_invitations_set_updated_at on public.gift_invitations;
+create trigger gift_invitations_set_updated_at
+before update on public.gift_invitations
 for each row execute function public.set_updated_at();

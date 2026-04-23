@@ -35,7 +35,7 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-type AdminTab = 'overview' | 'finance' | 'community' | 'settings';
+type AdminTab = 'overview' | 'finance' | 'community' | 'gifts' | 'settings';
 
 function initials(name: string | null, email: string | null) {
   const base = (name ?? '').trim();
@@ -156,6 +156,10 @@ function SummaryCard({
   );
 }
 
+function formatMoneyInput(amountInCents: number | null | undefined) {
+  return String(Number(amountInCents ?? 0) / 100);
+}
+
 function PaymentProgress({
   paid,
   due,
@@ -228,11 +232,11 @@ export default async function AdminPage({
     levelParam === '1' ? 1 : levelParam === '2' ? 2 : levelParam === 'all' ? null : 2;
   const tabParam = (searchParams?.tab ?? 'overview').toString() as AdminTab;
   const activeTab: AdminTab =
-    tabParam === 'finance' || tabParam === 'community' || tabParam === 'settings'
+    tabParam === 'finance' || tabParam === 'community' || tabParam === 'gifts' || tabParam === 'settings'
       ? tabParam
       : 'overview';
 
-  const { users, editions } = await getAdminData();
+  const { users, editions, giftInvitations } = await getAdminData();
 
   const selectedEdition =
     editions.find((edition) => edition.slug === searchParams?.edition) ??
@@ -298,11 +302,14 @@ export default async function AdminPage({
     (count, enrollment) => count + enrollment.payments.filter((payment) => payment.status === 'CONFIRMADO').length,
     0
   );
+  const editionSix = editions.find((edition) => edition.sequence === 6) ?? null;
+  const editionSixGiftInvitations = giftInvitations.filter((invitation) => invitation.edition?.sequence === 6);
 
   const tabs: { id: AdminTab; label: string; help: string }[] = [
     { id: 'overview', label: 'Resumen', help: 'Vista ejecutiva por edicion y fase.' },
     { id: 'finance', label: 'Finanzas', help: 'Operacion diaria de asignaciones y pagos.' },
     { id: 'community', label: 'Comunidad', help: 'Arbol, estados y referencias.' },
+    { id: 'gifts', label: 'CUPONES/REGALOS', help: 'Regalos de cupos para la 6ta edicion.' },
     { id: 'settings', label: 'Settings', help: 'Crear ediciones y fases.' },
   ];
 
@@ -571,6 +578,8 @@ export default async function AdminPage({
             >
               <form action={upsertEnrollment} className="grid gap-3 lg:grid-cols-5">
                 <input type="hidden" name="editionId" value={selectedEdition?.id ?? ''} />
+                <input type="hidden" name="phaseId" value={selectedPhase?.id ?? ''} />
+                <input type="hidden" name="returnTab" value="finance" />
 
                 <label className="grid gap-1 lg:col-span-2">
                   <span className="text-xs text-white/60">Participante</span>
@@ -592,29 +601,17 @@ export default async function AdminPage({
                 </label>
 
                 <label className="grid gap-1">
-                  <span className="text-xs text-white/60">Fase</span>
-                  <select
-                    name="phaseId"
-                    required
-                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                    defaultValue={selectedPhase?.id ?? ''}
-                  >
-                    <option value="" disabled>
-                      Seleccionar fase
-                    </option>
-                    {selectedEdition?.phases.map((phase) => (
-                      <option key={phase.id} value={phase.id}>
-                        {phase.title}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-xs text-white/60">Fase activa</span>
+                  <div className="flex h-11 items-center rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90">
+                    {selectedPhase ? selectedPhase.title : 'Selecciona una fase arriba'}
+                  </div>
                 </label>
 
                 <label className="grid gap-1">
                   <span className="text-xs text-white/60">Monto total</span>
                   <input
                     name="amountDue"
-                    defaultValue="0"
+                    defaultValue={formatMoneyInput(selectedPhase?.priceCents ?? 0)}
                     className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
                     placeholder="150000"
                   />
@@ -656,6 +653,16 @@ export default async function AdminPage({
                   </button>
                 </div>
               </form>
+              {selectedPhase ? (
+                <p className="mt-3 text-xs text-white/55">
+                  Esta ficha se guarda en <span className="font-semibold text-white/80">{selectedPhase.title}</span>.
+                  Precio sugerido:{' '}
+                  <span className="font-semibold text-white/80">
+                    {formatMoney(selectedPhase.priceCents ?? 0)}
+                  </span>
+                  .
+                </p>
+              ) : null}
             </SectionShell>
 
             <SectionShell
@@ -699,6 +706,7 @@ export default async function AdminPage({
                             <input type="hidden" name="editionId" value={enrollment.editionId} />
                             <input type="hidden" name="phaseId" value={enrollment.phase?.id ?? ''} />
                             <input type="hidden" name="currency" value={enrollment.currency} />
+                            <input type="hidden" name="returnTab" value="finance" />
 
                             <p className="text-sm font-semibold text-white/80">
                               Actualizar ficha de {enrollment.phase?.title ?? 'la fase'}
@@ -751,6 +759,7 @@ export default async function AdminPage({
                           <form action={recordPayment} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                             <input type="hidden" name="enrollmentId" value={enrollment.id} />
                             <input type="hidden" name="currency" value={enrollment.currency} />
+                            <input type="hidden" name="returnTab" value="finance" />
 
                             <p className="text-sm font-semibold text-white/80">Registrar pago</p>
 
@@ -1061,6 +1070,81 @@ export default async function AdminPage({
           </div>
         ) : null}
 
+        {activeTab === 'gifts' ? (
+          <div className="mt-8 grid gap-8">
+            <SectionShell
+              title="CUPONES/REGALOS"
+              subtitle="Seguimiento de quienes regalaron un lugar para Metamorfosis 6ta edicion."
+            >
+              <div className="grid gap-3 md:grid-cols-4">
+                <SummaryCard
+                  label="Edicion"
+                  value={editionSix?.title ?? 'Edicion 6'}
+                  help={editionSix?.notes ?? 'Regalos asociados a la 6ta edicion.'}
+                />
+                <SummaryCard
+                  label="Regalos cargados"
+                  value={editionSixGiftInvitations.length}
+                  help="Cantidad total de cupos regalados informados."
+                />
+                <SummaryCard
+                  label="Usuarios que regalaron"
+                  value={editionSixGiftInvitations.filter((entry) => entry.giver).length}
+                  help="Usuarios identificados dentro del sistema."
+                />
+                <SummaryCard
+                  label="Destino"
+                  value="6ta edicion"
+                  help="Sector exclusivo para ese beneficio."
+                />
+              </div>
+
+              <div className="mt-6 rounded-3xl border border-white/10 bg-black/20 p-5">
+                {editionSixGiftInvitations.length ? (
+                  <div className="grid gap-4">
+                    {editionSixGiftInvitations.map((gift) => (
+                      <div key={gift.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-5">
+                        <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
+                          <div>
+                            <p className="text-xs font-bold tracking-wide text-emerald-200/90">QUIEN REGALA</p>
+                            <p className="mt-2 text-lg font-semibold text-white/90">
+                              {gift.giver?.name ?? 'Sin nombre'}
+                            </p>
+                            <p className="mt-1 text-sm text-white/55">{gift.giver?.email ?? 'Sin email'}</p>
+                            {gift.giver ? (
+                              <p className="mt-2 text-xs text-white/60">
+                                Estado: {statusLabel(gift.giver.status)} - Rol: {roleLabel(gift.giver.role)}
+                              </p>
+                            ) : null}
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-bold tracking-wide text-amber-200/90">PERSONA INVITADA</p>
+                            <p className="mt-2 text-lg font-semibold text-white/90">
+                              {gift.recipientFirstName} {gift.recipientLastName}
+                            </p>
+                            <p className="mt-1 text-sm text-white/65">Celular: {gift.recipientPhone}</p>
+                            <p className="mt-2 text-xs text-white/50">
+                              Cargado: {new Date(gift.createdAt).toLocaleString()}
+                            </p>
+                            <p className="mt-1 text-xs text-white/50">
+                              Ultima actualizacion: {new Date(gift.updatedAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/70">
+                    Todavia no hay regalos cargados para Metamorfosis 6ta edicion.
+                  </p>
+                )}
+              </div>
+            </SectionShell>
+          </div>
+        ) : null}
+
         {activeTab === 'settings' ? (
           <div className="mt-8 grid gap-8">
             <SectionShell
@@ -1115,7 +1199,7 @@ export default async function AdminPage({
                   <form action={createAdminEditionPhase} className="grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-5">
                     <input type="hidden" name="editionId" value={selectedEdition.id} />
                     <p className="text-sm font-semibold text-white/80">Nueva fase en {selectedEdition.title}</p>
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <div className="grid gap-3 md:grid-cols-3">
                       <label className="grid gap-1">
                         <span className="text-xs text-white/60">Titulo</span>
                         <input
@@ -1133,6 +1217,15 @@ export default async function AdminPage({
                           type="number"
                           className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
                           placeholder="1"
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-xs text-white/60">Precio total</span>
+                        <input
+                          name="price"
+                          defaultValue="0"
+                          className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          placeholder="150000"
                         />
                       </label>
                     </div>
@@ -1214,7 +1307,7 @@ export default async function AdminPage({
                           <form
                             key={phase.id}
                             action={updateAdminEditionPhase}
-                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1.4fr,120px,1fr,auto]"
+                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1.2fr,100px,140px,1fr,auto]"
                           >
                             <input type="hidden" name="phaseId" value={phase.id} />
                             <input
@@ -1227,6 +1320,12 @@ export default async function AdminPage({
                               type="number"
                               defaultValue={phase.sequence}
                               className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                            <input
+                              name="price"
+                              defaultValue={formatMoneyInput(phase.priceCents)}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                              placeholder="150000"
                             />
                             <input
                               name="notes"
