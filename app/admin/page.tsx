@@ -14,9 +14,13 @@ import {
   sumConfirmedPayments,
 } from '@/app/lib/metamorfosis';
 import { getAdminData } from '@/app/lib/supabase/views';
+import { ActionNotice } from './ActionNotice';
+import { FinanceSelector } from './FinanceSelector';
+import { FormSubmitButton } from './FormSubmitButton';
 import {
   createAdminEdition,
   createAdminEditionPhase,
+  deletePayment,
   linkUserReferrer,
   recordPayment,
   updateAdminEdition,
@@ -220,7 +224,7 @@ function SectionShell({
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { q?: string; level?: string; edition?: string; phase?: string; tab?: string };
+  searchParams?: { q?: string; level?: string; edition?: string; phase?: string; tab?: string; notice?: string };
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
@@ -235,6 +239,7 @@ export default async function AdminPage({
     tabParam === 'finance' || tabParam === 'community' || tabParam === 'gifts' || tabParam === 'settings'
       ? tabParam
       : 'overview';
+  const notice = (searchParams?.notice ?? '').toString().trim();
 
   const { users, editions, giftInvitations } = await getAdminData();
 
@@ -315,6 +320,7 @@ export default async function AdminPage({
 
   return (
     <main className="min-h-screen text-white">
+      {notice ? <ActionNotice message={notice} /> : null}
       <div className="mx-auto w-full max-w-7xl px-5 py-10">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -572,6 +578,19 @@ export default async function AdminPage({
 
         {activeTab === 'finance' ? (
           <div className="mt-8 grid gap-8">
+            <FinanceSelector
+              editions={editions.map((edition) => ({
+                slug: edition.slug,
+                title: edition.title,
+                phases: edition.phases.map((phase) => ({
+                  slug: phase.slug,
+                  title: phase.title,
+                })),
+              }))}
+              selectedEditionSlug={selectedEdition?.slug}
+              selectedPhaseSlug={selectedPhase?.slug}
+            />
+
             <SectionShell
               title="Asignacion por fase"
               subtitle="Carga participantes en una fase especifica y registra el monto acordado."
@@ -645,12 +664,12 @@ export default async function AdminPage({
                 <input type="hidden" name="currency" value="ARS" />
 
                 <div className="flex items-end">
-                  <button
-                    type="submit"
+                  <FormSubmitButton
                     className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                    pendingLabel="Guardando ficha..."
                   >
                     Guardar ficha
-                  </button>
+                  </FormSubmitButton>
                 </div>
               </form>
               {selectedPhase ? (
@@ -667,7 +686,7 @@ export default async function AdminPage({
 
             <SectionShell
               title="Detalle operativo"
-              subtitle="Actualiza montos, estados y registra pagos de la fase seleccionada."
+              subtitle="Primero ves a todos los participantes de la fase con su progreso. Luego abres a quien quieras gestionar."
             >
               {phaseParticipants.length ? (
                 <div className="grid gap-4">
@@ -676,29 +695,47 @@ export default async function AdminPage({
                     const pending = Math.max(enrollment.amountDueCents - paid, 0);
 
                     return (
-                      <div key={enrollment.id} className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-white/90">
-                              {enrollment.user.name ?? 'Sin nombre'}
-                            </p>
-                            <p className="mt-1 text-xs text-white/50">{enrollment.user.email ?? '-'}</p>
-                            <p className="mt-2 text-xs text-white/60">
-                              Rol: {roleLabel(enrollment.user.role)} - Estado global:{' '}
-                              {statusLabel(enrollment.user.status)}
-                            </p>
-                            <p className="mt-3 text-sm text-white/60">
-                              {enrollment.phase ? `${enrollment.phase.title} - ` : ''}
-                              Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Pagado:{' '}
-                              {formatMoney(paid, enrollment.currency)} - Pendiente:{' '}
-                              {formatMoney(pending, enrollment.currency)}
-                            </p>
+                      <details
+                        key={enrollment.id}
+                        className="rounded-3xl border border-white/10 bg-black/20 p-5 open:border-emerald-400/30 open:bg-black/30"
+                      >
+                        <summary className="cursor-pointer list-none">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-white/90">
+                                {enrollment.user.name ?? 'Sin nombre'}
+                              </p>
+                              <p className="mt-1 text-xs text-white/50">{enrollment.user.email ?? '-'}</p>
+                              <p className="mt-2 text-xs text-white/60">
+                                Rol: {roleLabel(enrollment.user.role)} - Estado global:{' '}
+                                {statusLabel(enrollment.user.status)}
+                              </p>
+                              <p className="mt-3 text-sm text-white/60">
+                                {enrollment.phase ? `${enrollment.phase.title} - ` : ''}
+                                Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Pagado:{' '}
+                                {formatMoney(paid, enrollment.currency)} - Pendiente:{' '}
+                                {formatMoney(pending, enrollment.currency)}
+                              </p>
+                            </div>
+
+                            <div className="flex flex-col items-start gap-3 lg:items-end">
+                              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
+                                {enrollmentStatusLabel(enrollment.status)}
+                              </div>
+                              <span className="text-xs text-emerald-200/80">
+                                Click para ver pagos y acciones
+                              </span>
+                            </div>
                           </div>
 
-                          <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
-                            {enrollmentStatusLabel(enrollment.status)}
+                          <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+                            <PaymentProgress
+                              paid={paid}
+                              due={enrollment.amountDueCents}
+                              currency={enrollment.currency}
+                            />
                           </div>
-                        </div>
+                        </summary>
 
                         <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr,1fr]">
                           <form action={upsertEnrollment} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
@@ -748,12 +785,12 @@ export default async function AdminPage({
                               />
                             </label>
 
-                            <button
-                              type="submit"
+                            <FormSubmitButton
                               className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+                              pendingLabel="Actualizando ficha..."
                             >
                               Actualizar ficha
-                            </button>
+                            </FormSubmitButton>
                           </form>
 
                           <form action={recordPayment} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
@@ -833,30 +870,41 @@ export default async function AdminPage({
                               />
                             </label>
 
-                            <button
-                              type="submit"
+                            <FormSubmitButton
                               className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                              pendingLabel="Guardando pago..."
                             >
                               Cargar pago
-                            </button>
+                            </FormSubmitButton>
                           </form>
-                        </div>
-
-                        <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-                          <PaymentProgress paid={paid} due={enrollment.amountDueCents} currency={enrollment.currency} />
                         </div>
 
                         {enrollment.payments.length ? (
                           <div className="mt-5 grid gap-3">
                             {enrollment.payments.map((payment) => (
                               <div key={payment.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                  <p className="text-sm font-semibold text-white/90">
-                                    {formatMoney(payment.amountCents, payment.currency)}
-                                  </p>
-                                  <p className="text-xs text-white/50">
-                                    {new Date(payment.paidAt).toLocaleDateString()}
-                                  </p>
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                  <div>
+                                    <p className="text-sm font-semibold text-white/90">
+                                      {formatMoney(payment.amountCents, payment.currency)}
+                                    </p>
+                                    <p className="mt-1 text-xs text-white/50">
+                                      {new Date(payment.paidAt).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  <form action={deletePayment}>
+                                    <input type="hidden" name="paymentId" value={payment.id} />
+                                    <input type="hidden" name="editionSlug" value={selectedEdition?.slug ?? ''} />
+                                    <input type="hidden" name="phaseSlug" value={selectedPhase?.slug ?? ''} />
+                                    <input type="hidden" name="returnTab" value="finance" />
+                                    <FormSubmitButton
+                                      className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-400/10 px-3 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20"
+                                      pendingLabel="Borrando..."
+                                      confirmMessage="Seguro quieres borrar este registro de pago?"
+                                    >
+                                      Borrar pago
+                                    </FormSubmitButton>
+                                  </form>
                                 </div>
                                 <p className="mt-2 text-xs text-white/60">
                                   {paymentMethodLabel(payment.method)} - {paymentStatusLabel(payment.status)}
@@ -873,7 +921,7 @@ export default async function AdminPage({
                         ) : (
                           <p className="mt-5 text-sm text-white/70">Todavia no hay pagos para este participante.</p>
                         )}
-                      </div>
+                      </details>
                     );
                   })}
                 </div>
@@ -1257,31 +1305,21 @@ export default async function AdminPage({
                   <div key={edition.id} className="rounded-2xl border border-white/10 bg-black/20 p-5">
                     <form action={updateAdminEdition} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                       <input type="hidden" name="editionId" value={edition.id} />
+                      <input type="hidden" name="sequence" value={String(edition.sequence)} />
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-semibold text-white/90">Editar {edition.title}</p>
                         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
                           {edition.enrollments.length} ficha(s)
                         </span>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <label className="grid gap-1">
-                          <span className="text-xs text-white/60">Titulo</span>
-                          <input
-                            name="title"
-                            defaultValue={edition.title}
-                            className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                          />
-                        </label>
-                        <label className="grid gap-1">
-                          <span className="text-xs text-white/60">Secuencia</span>
-                          <input
-                            name="sequence"
-                            type="number"
-                            defaultValue={edition.sequence}
-                            className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                          />
-                        </label>
-                      </div>
+                      <label className="grid gap-1">
+                        <span className="text-xs text-white/60">Titulo</span>
+                        <input
+                          name="title"
+                          defaultValue={edition.title}
+                          className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                        />
+                      </label>
                       <label className="grid gap-1">
                         <span className="text-xs text-white/60">Notas</span>
                         <input
@@ -1307,18 +1345,13 @@ export default async function AdminPage({
                           <form
                             key={phase.id}
                             action={updateAdminEditionPhase}
-                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1.2fr,100px,140px,1fr,auto]"
+                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1.2fr,140px,1fr,auto]"
                           >
                             <input type="hidden" name="phaseId" value={phase.id} />
+                            <input type="hidden" name="sequence" value={String(phase.sequence)} />
                             <input
                               name="title"
                               defaultValue={phase.title}
-                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                            />
-                            <input
-                              name="sequence"
-                              type="number"
-                              defaultValue={phase.sequence}
                               className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
                             />
                             <input

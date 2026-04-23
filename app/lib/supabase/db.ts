@@ -559,6 +559,12 @@ export async function insertPayment(values: Partial<DbPayment> & { enrollment_id
   return mapPayment(data);
 }
 
+export async function deletePaymentById(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('payments').delete().eq('id', id);
+  assertNoError(error);
+}
+
 export async function saveGiftInvitation(
   values: Partial<DbGiftInvitation> & {
     giver_user_id: string;

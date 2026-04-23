@@ -16,6 +16,7 @@ import {
 import {
   createEdition,
   createEditionPhase,
+  deletePaymentById,
   getEditionById,
   getEditionPhaseById,
   getEnrollmentById,
@@ -69,6 +70,25 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
+function buildAdminReturnPath({
+  editionSlug,
+  phaseSlug,
+  tab,
+  notice,
+}: {
+  editionSlug?: string | null;
+  phaseSlug?: string | null;
+  tab?: string | null;
+  notice?: string | null;
+}) {
+  const params = new URLSearchParams();
+  if (editionSlug) params.set('edition', editionSlug);
+  if (phaseSlug) params.set('phase', phaseSlug);
+  if (tab) params.set('tab', tab);
+  if (notice) params.set('notice', notice);
+  return `/admin?${params.toString()}`;
+}
+
 export async function createAdminEdition(formData: FormData) {
   await requireAdminSession();
 
@@ -91,6 +111,7 @@ export async function createAdminEdition(formData: FormData) {
   });
 
   refreshAdminViews();
+  redirect(buildAdminReturnPath({ tab: 'settings', notice: 'Edicion guardada correctamente.' }));
 }
 
 export async function createAdminEditionPhase(formData: FormData) {
@@ -120,6 +141,14 @@ export async function createAdminEditionPhase(formData: FormData) {
   });
 
   refreshAdminViews();
+  redirect(
+    buildAdminReturnPath({
+      editionSlug: edition.slug,
+      phaseSlug: baseSlug,
+      tab: 'settings',
+      notice: 'Fase creada correctamente.',
+    })
+  );
 }
 
 export async function updateAdminEdition(formData: FormData) {
@@ -143,6 +172,7 @@ export async function updateAdminEdition(formData: FormData) {
   });
 
   refreshAdminViews();
+  redirect(buildAdminReturnPath({ tab: 'settings', notice: 'Edicion actualizada correctamente.' }));
 }
 
 export async function updateAdminEditionPhase(formData: FormData) {
@@ -166,6 +196,7 @@ export async function updateAdminEditionPhase(formData: FormData) {
   });
 
   refreshAdminViews();
+  redirect(buildAdminReturnPath({ tab: 'settings', notice: 'Fase actualizada correctamente.' }));
 }
 
 export async function updateUserStatus(formData: FormData) {
@@ -247,7 +278,14 @@ export async function upsertEnrollment(formData: FormData) {
   });
 
   refreshAdminViews();
-  redirect(`/admin?edition=${edition.slug}&phase=${phase.slug}&tab=${encodeURIComponent(returnTab)}`);
+  redirect(
+    buildAdminReturnPath({
+      editionSlug: edition.slug,
+      phaseSlug: phase.slug,
+      tab: returnTab,
+      notice: 'Ficha guardada correctamente.',
+    })
+  );
 }
 
 export async function recordPayment(formData: FormData) {
@@ -298,8 +336,37 @@ export async function recordPayment(formData: FormData) {
 
   refreshAdminViews();
   if (edition && phase) {
-    redirect(`/admin?edition=${edition.slug}&phase=${phase.slug}&tab=${encodeURIComponent(returnTab)}`);
+    redirect(
+      buildAdminReturnPath({
+        editionSlug: edition.slug,
+        phaseSlug: phase.slug,
+        tab: returnTab,
+        notice: 'Pago guardado correctamente.',
+      })
+    );
   }
+}
+
+export async function deletePayment(formData: FormData) {
+  await requireAdminSession();
+
+  const paymentId = String(formData.get('paymentId') ?? '').trim();
+  const editionSlug = String(formData.get('editionSlug') ?? '').trim() || null;
+  const phaseSlug = String(formData.get('phaseSlug') ?? '').trim() || null;
+  const returnTab = String(formData.get('returnTab') ?? 'finance').trim() || 'finance';
+
+  if (!paymentId) throw new Error('INVALID_PAYMENT');
+
+  await deletePaymentById(paymentId);
+  refreshAdminViews();
+  redirect(
+    buildAdminReturnPath({
+      editionSlug,
+      phaseSlug,
+      tab: returnTab,
+      notice: 'Pago eliminado correctamente.',
+    })
+  );
 }
 
 export async function linkUserReferrer(formData: FormData) {
