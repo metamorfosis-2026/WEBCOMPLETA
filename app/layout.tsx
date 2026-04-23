@@ -3,7 +3,7 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Metamorfosis \u2014 Taller (Marzo 2026)',
+  title: 'Metamorfosis \u2014 (2026)',
   description:
     'Metamorfosis: taller vivencial con psicolog\u00eda aplicada. Video explicativo, detalles del proceso y contacto directo por WhatsApp.',
   icons: {
