@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { syncSupabaseAuthUser } from '@/auth';
 import { safeRedirectPath } from '@/app/lib/metamorfosis';
-import { hasSupabaseEnv } from '@/app/lib/supabase/config';
+import { hasSupabaseAdminEnv, hasSupabaseEnv } from '@/app/lib/supabase/config';
 import { createClient } from '@/app/lib/supabase/server';
 
 export async function GET(request: Request) {
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const next = safeRedirectPath(requestUrl.searchParams.get('next'), '/dashboard');
   const ref = requestUrl.searchParams.get('ref');
 
-  if (!hasSupabaseEnv()) {
+  if (!hasSupabaseEnv() || !hasSupabaseAdminEnv()) {
     return NextResponse.redirect(new URL('/login?error=config', requestUrl.origin));
   }
 

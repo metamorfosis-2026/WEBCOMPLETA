@@ -1,4 +1,4 @@
-import { prisma } from '@/app/lib/prisma';
+import { upsertEdition } from '@/app/lib/supabase/db';
 
 const DEFAULT_EDITIONS = [
   {
@@ -20,14 +20,12 @@ const DEFAULT_EDITIONS = [
 export async function ensureDefaultEditions() {
   await Promise.all(
     DEFAULT_EDITIONS.map((edition) =>
-      prisma.edition.upsert({
-        where: { slug: edition.slug },
-        update: {
-          title: edition.title,
-          sequence: edition.sequence,
-          notes: edition.notes,
-        },
-        create: edition,
+      upsertEdition({
+        slug: edition.slug,
+        title: edition.title,
+        sequence: edition.sequence,
+        is_current: edition.isCurrent,
+        notes: edition.notes,
       })
     )
   );

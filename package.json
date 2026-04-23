@@ -3,25 +3,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/run-prisma.js generate && next build",
+    "build": "next build",
     "start": "next start",
-    "postinstall": "node scripts/run-prisma.js generate",
     "clean:next": "node scripts/clean-next.js",
     "clean": "npm run clean:next",
-    "clean:hard": "powershell -NoProfile -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Milliseconds 300; node scripts/clean-next.js\"",
-    "db:migrate": "node scripts/run-prisma.js migrate dev",
-    "db:push": "node scripts/run-prisma.js db push",
-    "db:studio": "node scripts/run-prisma.js studio",
-    "db:generate": "node scripts/run-prisma.js generate"
+    "clean:hard": "powershell -NoProfile -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Milliseconds 300; node scripts/clean-next.js\""
   },
   "dependencies": {
-    "@prisma/client": "^6.0.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.0",
     "framer-motion": "^11.0.0",
     "nanoid": "^5.1.6",
     "next": "14.2.35",
-    "prisma": "^6.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zod": "^4.3.6"
@@ -30,7 +23,6 @@
     "@types/node": "25.2.1",
     "@types/react": "19.2.13",
     "autoprefixer": "^10.4.0",
-    "dotenv": "^17.4.2",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "5.9.3"

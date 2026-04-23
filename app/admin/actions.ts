@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 
 import { auth } from '@/auth';
-import { prisma } from '@/app/lib/prisma';
 import {
   isAdminRole,
   isSuperadminRole,
@@ -13,6 +12,16 @@ import {
   normalizeUserStatus,
   parseMoneyToCents,
 } from '@/app/lib/metamorfosis';
+import {
+  getEditionById,
+  getEnrollmentById,
+  getUserById,
+  insertPayment,
+  insertPointsTransaction,
+  insertStatusEvent,
+  saveEnrollment,
+  updateUser,
+} from '@/app/lib/supabase/db';
 
 const REF_FASE1_POINTS = 100;
 
@@ -33,10 +42,7 @@ async function assertNoReferralCycle(userId: string, referredById: string | null
       throw new Error('REFERRAL_CYCLE');
     }
 
-    const current = await prisma.user.findUnique({
-      where: { id: currentId },
-      select: { referredById: true },
-    });
+    const current = await getUserById(currentId);
 
     currentId = current?.referredById ?? null;
   }
@@ -56,45 +62,35 @@ export async function updateUserStatus(formData: FormData) {
 
   if (!userId) throw new Error('INVALID_USER');
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, status: true, referredById: true },
-  });
+  const user = await getUserById(userId);
 
   if (!user) throw new Error('NOT_FOUND');
   if (user.status === toStatus) return;
 
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: userId },
-      data: { status: toStatus },
-    });
+  await updateUser(userId, { status: toStatus });
+  await insertStatusEvent({
+    user_id: userId,
+    from_status: user.status,
+    to_status: toStatus,
+    actor_id: session.user.id,
+  });
 
-    await tx.userStatusEvent.create({
-      data: {
-        userId,
-        fromStatus: user.status,
-        toStatus,
-        actorId: session.user.id,
-      },
-    });
+  if (awardReferrer && toStatus === 'FASE_1' && user.referredById) {
+    const referrer = await getUserById(user.referredById);
 
-    if (awardReferrer && toStatus === 'FASE_1' && user.referredById) {
-      await tx.pointsTransaction.create({
-        data: {
-          userId: user.referredById,
-          points: REF_FASE1_POINTS,
-          reason: 'referral_fase1',
-          metadata: JSON.stringify({ referredUserId: userId }),
-        },
+    if (referrer) {
+      await insertPointsTransaction({
+        user_id: referrer.id,
+        points: REF_FASE1_POINTS,
+        reason: 'referral_fase1',
+        metadata: JSON.stringify({ referredUserId: userId }),
       });
 
-      await tx.user.update({
-        where: { id: user.referredById },
-        data: { pointsBalance: { increment: REF_FASE1_POINTS } },
+      await updateUser(referrer.id, {
+        points_balance: referrer.pointsBalance + REF_FASE1_POINTS,
       });
     }
-  });
+  }
 
   refreshAdminViews();
 }
@@ -111,34 +107,17 @@ export async function upsertEnrollment(formData: FormData) {
 
   if (!userId || !editionId) throw new Error('INVALID_ENROLLMENT');
 
-  const [user, edition] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
-    prisma.edition.findUnique({ where: { id: editionId }, select: { id: true } }),
-  ]);
+  const [user, edition] = await Promise.all([getUserById(userId), getEditionById(editionId)]);
 
   if (!user || !edition) throw new Error('NOT_FOUND');
 
-  await prisma.enrollment.upsert({
-    where: {
-      userId_editionId: {
-        userId,
-        editionId,
-      },
-    },
-    update: {
-      status,
-      amountDueCents,
-      currency,
-      notes,
-    },
-    create: {
-      userId,
-      editionId,
-      status,
-      amountDueCents,
-      currency,
-      notes,
-    },
+  await saveEnrollment({
+    user_id: userId,
+    edition_id: editionId,
+    status,
+    amount_due_cents: amountDueCents,
+    currency,
+    notes,
   });
 
   refreshAdminViews();
@@ -158,25 +137,20 @@ export async function recordPayment(formData: FormData) {
 
   if (!enrollmentId || amountCents <= 0) throw new Error('INVALID_PAYMENT');
 
-  const enrollment = await prisma.enrollment.findUnique({
-    where: { id: enrollmentId },
-    select: { id: true },
-  });
+  const enrollment = await getEnrollmentById(enrollmentId);
 
   if (!enrollment) throw new Error('NOT_FOUND');
 
-  await prisma.payment.create({
-    data: {
-      enrollmentId,
-      amountCents,
-      currency,
-      method,
-      status,
-      reference,
-      notes,
-      paidAt: paidAtRaw ? new Date(`${paidAtRaw}T12:00:00.000Z`) : new Date(),
-      recordedById: session.user.id,
-    },
+  await insertPayment({
+    enrollment_id: enrollmentId,
+    amount_cents: amountCents,
+    currency,
+    method,
+    status,
+    reference,
+    notes,
+    paid_at: paidAtRaw ? new Date(`${paidAtRaw}T12:00:00.000Z`).toISOString() : new Date().toISOString(),
+    recorded_by_id: session.user.id,
   });
 
   refreshAdminViews();
@@ -196,22 +170,14 @@ export async function linkUserReferrer(formData: FormData) {
   if (!userId) throw new Error('INVALID_USER');
   if (referredById === userId) throw new Error('SELF_REFERRAL');
 
-  const [user, referrer] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { id: true } }),
-    referredById
-      ? prisma.user.findUnique({ where: { id: referredById }, select: { id: true } })
-      : Promise.resolve(null),
-  ]);
+  const [user, referrer] = await Promise.all([getUserById(userId), referredById ? getUserById(referredById) : null]);
 
   if (!user) throw new Error('NOT_FOUND');
   if (referredById && !referrer) throw new Error('REFERRER_NOT_FOUND');
 
   await assertNoReferralCycle(userId, referredById);
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { referredById },
-  });
+  await updateUser(userId, { referred_by_id: referredById });
 
   refreshAdminViews();
 }

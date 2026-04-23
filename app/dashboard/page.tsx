@@ -10,7 +10,7 @@ import {
   statusLabel,
   sumConfirmedPayments,
 } from '@/app/lib/metamorfosis';
-import { prisma } from '@/app/lib/prisma';
+import { getDashboardData } from '@/app/lib/supabase/views';
 import SignOutButton from './ui/SignOutButton';
 import { ReferralTree } from './ui/ReferralTree';
 
@@ -18,52 +18,7 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      referredBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      referrals: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          status: true,
-          createdAt: true,
-          referrals: {
-            select: { id: true, name: true, email: true, status: true, createdAt: true },
-            orderBy: { createdAt: 'desc' },
-            take: 25,
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      },
-      statusEvents: {
-        orderBy: { createdAt: 'desc' },
-        take: 8,
-      },
-      pointsTransactions: {
-        orderBy: { createdAt: 'desc' },
-        take: 8,
-      },
-      enrollments: {
-        include: {
-          edition: true,
-          payments: {
-            orderBy: { paidAt: 'desc' },
-            take: 10,
-          },
-        },
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  });
+  const user = await getDashboardData(session.user.id);
 
   if (!user) redirect('/login');
 

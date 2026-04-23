@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
-import { ensureDefaultEditions } from '@/app/lib/editions';
 import {
   enrollmentStatusLabel,
   formatMoney,
@@ -14,7 +13,7 @@ import {
   statusLabel,
   sumConfirmedPayments,
 } from '@/app/lib/metamorfosis';
-import { prisma } from '@/app/lib/prisma';
+import { getAdminData } from '@/app/lib/supabase/views';
 import { linkUserReferrer, recordPayment, updateUserStatus, upsertEnrollment } from './actions';
 
 type TreeNode = {
@@ -123,77 +122,12 @@ export default async function AdminPage({
   if (!session?.user?.id) redirect('/login');
   if (!isAdminRole(session.user.role)) redirect('/dashboard');
 
-  await ensureDefaultEditions();
-
   const q = (searchParams?.q ?? '').toString();
   const levelParam = (searchParams?.level ?? '2').toString();
   const maxDepth: number | null =
     levelParam === '1' ? 1 : levelParam === '2' ? 2 : levelParam === 'all' ? null : 2;
 
-  const [users, editions] = await Promise.all([
-    prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        referralCode: true,
-        status: true,
-        pointsBalance: true,
-        referredById: true,
-        referredBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        enrollments: {
-          select: {
-            id: true,
-            edition: {
-              select: {
-                id: true,
-                title: true,
-                slug: true,
-                sequence: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.edition.findMany({
-      include: {
-        enrollments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                status: true,
-                role: true,
-                referredBy: {
-                  select: {
-                    name: true,
-                    email: true,
-                  },
-                },
-              },
-            },
-            payments: {
-              orderBy: { paidAt: 'desc' },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-      orderBy: [{ isCurrent: 'desc' }, { sequence: 'asc' }],
-    }),
-  ]);
+  const { users, editions } = await getAdminData();
 
   const selectedEdition =
     editions.find((edition) => edition.slug === searchParams?.edition) ??
@@ -208,7 +142,7 @@ export default async function AdminPage({
       id: user.id,
       name: user.name,
       email: user.email,
-      referralCode: user.referralCode,
+      referralCode: user.referralCode ?? null,
       status: user.status,
       pointsBalance: user.pointsBalance,
       children: [],

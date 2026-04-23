@@ -1,20 +1,25 @@
 # Supabase setup
 
-## 1. Desarrollo local
+## Objetivo
 
-Usa solo `.env.local` para desarrollo. Ese archivo ya esta ignorado por git, asi que no se sube al repo.
+Este proyecto ahora usa:
 
-Tus secretos reales deben vivir en:
+- Supabase Auth para login con Google
+- Supabase Database para usuarios, ediciones, pagos y dashboard
+- Vercel para deploy
+- GitHub para source control
 
-- `.env.local` para local
-- Environment Variables de Vercel para preview/production
+No usa Prisma ni `DATABASE_URL`.
 
-Completa estas variables en `.env.local`:
+## Variables necesarias
+
+En local usa solo `.env.local`.
 
 ```env
-DATABASE_URL=""
 NEXT_PUBLIC_SUPABASE_URL=""
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=""
+SUPABASE_SERVICE_ROLE_KEY=""
+
 SUPERADMIN_EMAILS="gestiones.metamorfosis@gmail.com"
 ADMIN_EMAILS=""
 OWNER_EMAIL=""
@@ -22,6 +27,7 @@ OWNER_EMAIL=""
 NEXT_PUBLIC_WHATSAPP_NUMBER=""
 NEXT_PUBLIC_VERTICAL_VIDEO_URL=""
 NEXT_PUBLIC_SPLINE_SCENE_URL=""
+
 NEXT_PUBLIC_ENABLE_BUTTERFLY_OVERLAY="false"
 NEXT_PUBLIC_BUTTERFLY_FRAMES_BASE_URL=""
 NEXT_PUBLIC_BUTTERFLY_FRAMES_PREFIX="maripometaweb"
@@ -36,84 +42,77 @@ NEXT_PUBLIC_BUTTERFLY_MAX_WIDTH_PX="420"
 
 Notas:
 
-- `DATABASE_URL` debe apuntar al Postgres de Supabase que va a usar Prisma.
-- Para una puesta en marcha rapida, copia el string desde `Connect` en Supabase.
-- Si en lugar del Session pooler usas el pooler transaccional (`6543`), agrega `?pgbouncer=true` al final del string para Prisma.
-- Los scripts de Prisma del proyecto ya priorizan `.env.local`.
-- Si no completas `NEXT_PUBLIC_SPLINE_SCENE_URL` o `NEXT_PUBLIC_ENABLE_BUTTERFLY_OVERLAY`, la app usa fallbacks visuales seguros.
+- `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` salen de `Project Settings > API`.
+- `SUPABASE_SERVICE_ROLE_KEY` tambien sale de `Project Settings > API`.
+- `SUPABASE_SERVICE_ROLE_KEY` va solo en servidor. No la expongas en el cliente.
 
+## Crear tablas en Supabase
 
-## 2. Levantar el esquema en Supabase
+1. Ve a `Supabase > SQL Editor`.
+2. Abre [supabase/schema.sql](/e:/PRGRAMACION%20PROYECTOS/metamorfosis-web/supabase/schema.sql).
+3. Copia el contenido completo.
+4. Pegalo y ejecutalo en Supabase.
 
-Con `DATABASE_URL` apuntando al proyecto correcto:
+Eso crea:
 
-```bash
-npm run db:push
-npm run db:generate
-```
+- `users`
+- `user_status_events`
+- `points_transactions`
+- `editions`
+- `enrollments`
+- `payments`
 
-Las tablas nuevas incluyen:
+## Google Auth
 
-- usuarios sincronizados con `auth.users` por `supabaseAuthId`
-- ediciones
-- asignaciones por usuario/edicion
-- pagos por asignacion
+En Supabase:
 
-Las ediciones 5 y 6 se crean automaticamente al entrar al admin por primera vez.
+1. `Authentication > Sign in / Providers`
+2. Activa `Google`
+3. Carga tu `Client ID` y `Client Secret`
 
-## 3. Activar Google en Supabase Auth
+En Google Cloud, el callback autorizado debe ser el de Supabase:
 
-En el dashboard de Supabase:
+- `https://TU-PROYECTO.supabase.co/auth/v1/callback`
 
-1. Ve a `Authentication`.
-2. Abre `Sign In / Providers`.
-3. Activa `Google`.
-4. Configura el client ID y secret de Google dentro de Supabase.
+## URL configuration en Supabase
 
-Redirect URLs de la app:
+En `Authentication > URL Configuration`:
+
+- `Site URL`: `https://metamorfosis.vip`
+
+Agrega como redirect URLs permitidas:
 
 - `http://localhost:3000/auth/callback`
-- `https://tu-dominio.com/auth/callback`
+- `https://metamorfosis.vip/auth/callback`
+- `https://webcompleta-iqfx.vercel.app/auth/callback`
 
-## 4. Vercel
+Si cambias el dominio de Vercel, agrega tambien el nuevo callback.
 
-En Vercel no se usa `.env.local`. Copia manualmente las mismas variables desde tu entorno local a:
+## Vercel
 
-- `Production`
-- `Preview`
-- `Development` si quieres usar `vercel dev`
+En `Project > Settings > Environment Variables` agrega:
 
-Checklist minimo para que el deploy funcione:
-
-- `DATABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPERADMIN_EMAILS`
 - `OWNER_EMAIL`
+- `ADMIN_EMAILS` si aplica
 - `NEXT_PUBLIC_WHATSAPP_NUMBER`
 
-Variables opcionales:
+Y si quieres igualar la landing local:
 
-- `ADMIN_EMAILS`
 - `NEXT_PUBLIC_VERTICAL_VIDEO_URL`
 - `NEXT_PUBLIC_SPLINE_SCENE_URL`
 - `NEXT_PUBLIC_ENABLE_BUTTERFLY_OVERLAY`
 - `NEXT_PUBLIC_BUTTERFLY_*`
 
-Nota importante sobre tu bloqueo actual en Vercel:
+Despues haz `Redeploy`.
 
-- El error de la captura no apunta al codigo ni a Supabase.
-- El proyecto esta enlazado a un team de Vercel y el deploy fue bloqueado porque el autor del commit no tiene permisos de contribucion en ese proyecto.
-- Eso se resuelve agregando ese usuario al proyecto/team en Vercel o haciendo el deploy desde un usuario con acceso.
-
-## 5. Flujo esperado
+## Flujo esperado
 
 - Login y registro usan Google via Supabase Auth.
-- En el callback se crea o sincroniza el usuario en Prisma.
-- Si el alta vino con `?ref=CODIGO`, se vincula automaticamente el referente.
-- `gestiones.metamorfosis@gmail.com` queda como superadmin.
-- El panel `/admin` permite:
-  - cargar participantes por edicion
-  - registrar pagos
-  - cambiar el estado global del usuario
-  - reasignar manualmente quien invito a quien si eres superadmin
+- El callback `/auth/callback` intercambia el code por session.
+- La app sincroniza el usuario en la tabla `users`.
+- Si entra con `?ref=CODIGO`, se asocia el referente.
+- `gestiones.metamorfosis@gmail.com` queda como superadmin por default.

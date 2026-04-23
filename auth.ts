@@ -1,47 +1,20 @@
 import { cache } from 'react';
-import { nanoid } from 'nanoid';
 import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-import { prisma } from './app/lib/prisma';
 import {
-  DEFAULT_SUPERADMIN_EMAIL,
   normalizeEmail,
-  normalizeRole,
   normalizeUserStatus,
 } from './app/lib/metamorfosis';
-import { hasSupabaseEnv } from './app/lib/supabase/config';
+import { hasSupabaseAdminEnv, hasSupabaseEnv } from './app/lib/supabase/config';
 import { createClient } from './app/lib/supabase/server';
-
-function getAdminEmails() {
-  const emails = new Set<string>();
-
-  for (const email of (process.env.ADMIN_EMAILS ?? '').split(',')) {
-    const normalized = normalizeEmail(email);
-    if (normalized) emails.add(normalized);
-  }
-
-  return emails;
-}
-
-function getSuperadminEmails() {
-  const emails = new Set<string>([DEFAULT_SUPERADMIN_EMAIL]);
-
-  const owner = normalizeEmail(process.env.OWNER_EMAIL);
-  if (owner) emails.add(owner);
-
-  for (const email of (process.env.SUPERADMIN_EMAILS ?? '').split(',')) {
-    const normalized = normalizeEmail(email);
-    if (normalized) emails.add(normalized);
-  }
-
-  return emails;
-}
-
-function getConfiguredRole(email: string) {
-  if (getSuperadminEmails().has(email)) return 'SUPERADMIN' as const;
-  if (getAdminEmails().has(email)) return 'ADMIN' as const;
-  return null;
-}
+import {
+  generateReferralCode,
+  getUserByAuthIdOrEmail,
+  getUserByReferralCode,
+  resolveRole,
+  updateUser,
+  createUser,
+} from './app/lib/supabase/db';
 
 function getDisplayName(user: SupabaseAuthUser) {
   const metadataName =
@@ -50,100 +23,62 @@ function getDisplayName(user: SupabaseAuthUser) {
   return normalized || null;
 }
 
-async function generateReferralCode() {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const code = nanoid(10);
-    const existing = await prisma.user.findUnique({
-      where: { referralCode: code },
-      select: { id: true },
-    });
-
-    if (!existing) return code;
-  }
-
-  throw new Error('REFERRAL_CODE_GENERATION_FAILED');
-}
-
 async function resolveReferralUserId(refCode?: string | null, excludedUserId?: string | null) {
   const normalizedRefCode = String(refCode ?? '').trim();
   if (!normalizedRefCode) return null;
 
-  const referrer = await prisma.user.findUnique({
-    where: { referralCode: normalizedRefCode },
-    select: { id: true },
-  });
+  const referrer = await getUserByReferralCode(normalizedRefCode);
 
-  if (!referrer?.id) return null;
+  if (!referrer) return null;
   if (excludedUserId && referrer.id === excludedUserId) return null;
 
   return referrer.id;
-}
-
-function resolveRole(email: string, currentRole?: string | null) {
-  const configuredRole = getConfiguredRole(email);
-  if (configuredRole) return configuredRole;
-
-  const normalizedCurrent = normalizeRole(currentRole);
-  if (normalizedCurrent === 'SUPERADMIN' || normalizedCurrent === 'ADMIN') {
-    return normalizedCurrent;
-  }
-
-  return 'USER' as const;
 }
 
 async function upsertAppUserFromSupabaseUser(user: SupabaseAuthUser, refCode?: string | null) {
   const email = normalizeEmail(user.email);
   if (!email) return null;
 
-  const existing = await prisma.user.findFirst({
-    where: {
-      OR: [{ supabaseAuthId: user.id }, { email }],
-    },
-  });
+  const existing = await getUserByAuthIdOrEmail(user.id, email);
 
   const role = resolveRole(email, existing?.role);
   const referredById =
     existing?.referredById ?? (await resolveReferralUserId(refCode, existing?.id ?? null));
 
   const data = {
-    supabaseAuthId: user.id,
+    supabase_auth_id: user.id,
     email,
     name: getDisplayName(user) ?? existing?.name ?? null,
     image: String(user.user_metadata?.avatar_url ?? existing?.image ?? '') || null,
-    emailVerified: user.email_confirmed_at ? new Date(user.email_confirmed_at) : existing?.emailVerified ?? null,
+    email_verified: user.email_confirmed_at ?? (existing?.emailVerified?.toISOString() ?? null),
     role,
     status: normalizeUserStatus(existing?.status),
-    referralCode: existing?.referralCode ?? (await generateReferralCode()),
-    referredById,
+    referral_code: existing?.referralCode ?? (await generateReferralCode()),
+    referred_by_id: referredById,
   };
 
   if (existing) {
     const hasChanges =
-      existing.supabaseAuthId !== data.supabaseAuthId ||
+      existing.supabaseAuthId !== data.supabase_auth_id ||
       existing.email !== data.email ||
       existing.name !== data.name ||
       existing.image !== data.image ||
-      String(existing.emailVerified ?? '') !== String(data.emailVerified ?? '') ||
+      String(existing.emailVerified?.toISOString() ?? '') !== String(data.email_verified ?? '') ||
       existing.role !== data.role ||
       existing.status !== data.status ||
-      existing.referralCode !== data.referralCode ||
-      existing.referredById !== data.referredById;
+      existing.referralCode !== data.referral_code ||
+      existing.referredById !== data.referred_by_id;
 
     if (!hasChanges) {
       return existing;
     }
 
-    return prisma.user.update({
-      where: { id: existing.id },
-      data,
-    });
+    return updateUser(existing.id, data);
   }
 
-  return prisma.user.create({
-    data: {
-      ...data,
-      pointsBalance: 0,
-    },
+  return createUser({
+    ...data,
+    points_balance: 0,
   });
 }
 
@@ -153,7 +88,7 @@ export async function syncSupabaseAuthUser(user: SupabaseAuthUser, options?: { r
 }
 
 export async function syncAuthenticatedUser(options?: { refCode?: string | null }) {
-  if (!hasSupabaseEnv()) return null;
+  if (!hasSupabaseEnv() || !hasSupabaseAdminEnv()) return null;
 
   const supabase = await createClient();
   const {
@@ -176,8 +111,8 @@ export const auth = cache(async () => {
       name: appUser.name,
       email: appUser.email,
       image: appUser.image,
-      role: normalizeRole(appUser.role),
-      status: normalizeUserStatus(appUser.status),
+      role: appUser.role,
+      status: appUser.status,
       referralCode: appUser.referralCode ?? null,
       pointsBalance: appUser.pointsBalance ?? 0,
     },
