@@ -7,25 +7,29 @@ import {
   formatMoney,
   isAdminRole,
   isSuperadminRole,
-  paymentMethodLabel,
-  paymentStatusLabel,
   roleLabel,
   statusLabel,
   sumConfirmedPayments,
 } from '@/app/lib/metamorfosis';
 import { getAdminData } from '@/app/lib/supabase/views';
 import { ActionNotice } from './ActionNotice';
-import { FinanceSelector } from './FinanceSelector';
 import { FormSubmitButton } from './FormSubmitButton';
+import { GodFormModal } from './GodFormModal';
+import { UserDetailModal } from './UserDetailModal';
 import {
+  assignGodToUser,
   createAdminEdition,
   createAdminEditionPhase,
-  deletePayment,
+  createNewsPost,
+  createWeeklyTask,
+  deleteNewsPostAction,
+  deleteWeeklyTaskAction,
   linkUserReferrer,
-  recordPayment,
   updateAdminEdition,
   updateAdminEditionPhase,
+  updateNewsPostAction,
   updateUserStatus,
+  updateWeeklyTaskAction,
   upsertEnrollment,
 } from './actions';
 
@@ -39,7 +43,7 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-type AdminTab = 'overview' | 'finance' | 'community' | 'gifts' | 'settings';
+type AdminTab = 'overview' | 'finance' | 'community' | 'aula' | 'news' | 'gods' | 'gifts' | 'settings';
 
 function initials(name: string | null, email: string | null) {
   const base = (name ?? '').trim();
@@ -79,7 +83,7 @@ function filterTree(node: TreeNode, query: string): TreeNode | null {
   return { ...node, children: nextChildren };
 }
 
-function NodeCard({ node }: { node: TreeNode }) {
+function NodeCardInner({ node }: { node: TreeNode }) {
   return (
     <div className="tree-node">
       <div className="tree-avatar" aria-hidden="true">
@@ -105,33 +109,20 @@ function NodeCard({ node }: { node: TreeNode }) {
   );
 }
 
-function renderTree(node: TreeNode, depth: number, maxDepth: number | null) {
-  const atLimit = maxDepth !== null && depth >= maxDepth;
-
-  return (
-    <div key={node.id} className="tree-row">
-      <NodeCard node={node} />
-      {!atLimit && node.children.length ? (
-        <div className="mt-3 pl-4">
-          <div className="tree">{node.children.map((child) => renderTree(child, depth + 1, maxDepth))}</div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function buildAdminHref({
   edition,
   phase,
   q,
   level,
   tab,
+  enrollmentStatus,
 }: {
   edition?: string;
   phase?: string;
   q?: string;
   level?: string;
   tab?: string;
+  enrollmentStatus?: string;
 }) {
   const params = new URLSearchParams();
   if (edition) params.set('edition', edition);
@@ -139,6 +130,7 @@ function buildAdminHref({
   if (q?.trim()) params.set('q', q.trim());
   if (level) params.set('level', level);
   if (tab) params.set('tab', tab);
+  if (enrollmentStatus) params.set('estado', enrollmentStatus);
   return `/admin?${params.toString()}`;
 }
 
@@ -224,7 +216,16 @@ function SectionShell({
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams?: { q?: string; level?: string; edition?: string; phase?: string; tab?: string; notice?: string };
+  searchParams?: {
+    q?: string;
+    level?: string;
+    edition?: string;
+    phase?: string;
+    tab?: string;
+    notice?: string;
+    estado?: string;
+    godsEdition?: string;
+  };
 }) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
@@ -235,13 +236,11 @@ export default async function AdminPage({
   const maxDepth: number | null =
     levelParam === '1' ? 1 : levelParam === '2' ? 2 : levelParam === 'all' ? null : 2;
   const tabParam = (searchParams?.tab ?? 'overview').toString() as AdminTab;
-  const activeTab: AdminTab =
-    tabParam === 'finance' || tabParam === 'community' || tabParam === 'gifts' || tabParam === 'settings'
-      ? tabParam
-      : 'overview';
+  const validTabs: AdminTab[] = ['overview', 'finance', 'community', 'aula', 'news', 'gods', 'gifts', 'settings'];
+  const activeTab: AdminTab = validTabs.includes(tabParam) ? tabParam : 'overview';
   const notice = (searchParams?.notice ?? '').toString().trim();
 
-  const { users, editions, giftInvitations } = await getAdminData();
+  const { users, editions, giftInvitations, weeklyTasks, newsPosts, gods } = await getAdminData();
 
   const selectedEdition =
     editions.find((edition) => edition.slug === searchParams?.edition) ??
@@ -286,10 +285,28 @@ export default async function AdminPage({
         .filter(Boolean) as TreeNode[]
     : roots;
 
+  const enrollmentStatusFilter = (searchParams?.estado ?? 'cursando').toString().toLowerCase();
   const editionParticipants = selectedEdition?.enrollments ?? [];
-  const phaseParticipants = selectedPhase
+  const phaseParticipantsAll = selectedPhase
     ? editionParticipants.filter((enrollment) => enrollment.phase?.id === selectedPhase.id)
     : [];
+  const phaseParticipants =
+    enrollmentStatusFilter === 'finalizados'
+      ? phaseParticipantsAll.filter((entry) => String(entry.status).toUpperCase() === 'FINALIZADO')
+      : enrollmentStatusFilter === 'cursando'
+      ? phaseParticipantsAll.filter(
+          (entry) => String(entry.status).toUpperCase() !== 'FINALIZADO'
+            && String(entry.status).toUpperCase() !== 'CANCELADO'
+        )
+      : phaseParticipantsAll;
+  const finalizedInPhaseCount = phaseParticipantsAll.filter(
+    (entry) => String(entry.status).toUpperCase() === 'FINALIZADO'
+  ).length;
+  const cursandoInPhaseCount = phaseParticipantsAll.filter(
+    (entry) =>
+      String(entry.status).toUpperCase() !== 'FINALIZADO' &&
+      String(entry.status).toUpperCase() !== 'CANCELADO'
+  ).length;
   const totalDue = phaseParticipants.reduce((sum, enrollment) => sum + enrollment.amountDueCents, 0);
   const totalPaid = phaseParticipants.reduce(
     (sum, enrollment) => sum + sumConfirmedPayments(enrollment.payments),
@@ -314,9 +331,78 @@ export default async function AdminPage({
     { id: 'overview', label: 'Resumen', help: 'Vista ejecutiva por edicion y fase.' },
     { id: 'finance', label: 'Finanzas', help: 'Operacion diaria de asignaciones y pagos.' },
     { id: 'community', label: 'Comunidad', help: 'Arbol, estados y referencias.' },
+    { id: 'aula', label: 'Aula', help: 'Tareas semanales por fase y material de estudio.' },
+    { id: 'news', label: 'Noticias', help: 'Banners visibles para todos los usuarios.' },
+    { id: 'gods', label: 'Dioses', help: 'Catalogo de dioses griegos y asignaciones.' },
     { id: 'gifts', label: 'CUPONES/REGALOS', help: 'Regalos de cupos para la 6ta edicion.' },
     { id: 'settings', label: 'Settings', help: 'Crear ediciones y fases.' },
   ];
+
+  const phaseSequenceMap = new Map<number, string>();
+  for (const edition of editions) {
+    for (const phase of edition.phases) {
+      if (!phaseSequenceMap.has(phase.sequence)) {
+        const cleanTitle = String(phase.title).replace(/\s*-?\s*edicion\s*\d+/i, '').trim();
+        phaseSequenceMap.set(phase.sequence, cleanTitle || `Fase ${phase.sequence}`);
+      }
+    }
+  }
+  const phaseSequenceOptions = Array.from(phaseSequenceMap.entries())
+    .map(([sequence, label]) => ({ sequence, label: `Fase ${sequence} (${label})` }))
+    .sort((left, right) => left.sequence - right.sequence);
+
+  const editionsForModal = editions.map((edition) => ({
+    id: edition.id,
+    slug: edition.slug,
+    title: edition.title,
+    sequence: edition.sequence,
+    phases: edition.phases.map((phase) => ({
+      id: phase.id,
+      slug: phase.slug,
+      title: phase.title,
+      sequence: phase.sequence,
+      priceCents: phase.priceCents ?? 0,
+    })),
+  }));
+
+  const userById = new Map(users.map((user) => [user.id, user]));
+  const userIsSuperadmin = isSuperadminRole(session.user.role);
+  const usersForModal = users.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    email: entry.email,
+  }));
+
+  function renderClickableTree(node: TreeNode, depth: number, maxDepth: number | null) {
+    const atLimit = maxDepth !== null && depth >= maxDepth;
+    const fullUser = userById.get(node.id);
+
+    return (
+      <div key={node.id} className="tree-row">
+        {fullUser ? (
+          <UserDetailModal
+            user={fullUser}
+            editions={editionsForModal}
+            selectedEditionSlug={selectedEdition?.slug ?? null}
+            selectedPhaseSlug={selectedPhase?.slug ?? null}
+            allUsers={usersForModal}
+            isSuperadmin={userIsSuperadmin}
+          >
+            <NodeCardInner node={node} />
+          </UserDetailModal>
+        ) : (
+          <NodeCardInner node={node} />
+        )}
+        {!atLimit && node.children.length ? (
+          <div className="mt-3 pl-4">
+            <div className="tree">
+              {node.children.map((child) => renderClickableTree(child, depth + 1, maxDepth))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen text-white">
@@ -578,19 +664,6 @@ export default async function AdminPage({
 
         {activeTab === 'finance' ? (
           <div className="mt-8 grid gap-8">
-            <FinanceSelector
-              editions={editions.map((edition) => ({
-                slug: edition.slug,
-                title: edition.title,
-                phases: edition.phases.map((phase) => ({
-                  slug: phase.slug,
-                  title: phase.title,
-                })),
-              }))}
-              selectedEditionSlug={selectedEdition?.slug}
-              selectedPhaseSlug={selectedPhase?.slug}
-            />
-
             <SectionShell
               title="Asignacion por fase"
               subtitle="Carga participantes en una fase especifica y registra el monto acordado."
@@ -685,243 +758,116 @@ export default async function AdminPage({
             </SectionShell>
 
             <SectionShell
-              title="Detalle operativo"
-              subtitle="Primero ves a todos los participantes de la fase con su progreso. Luego abres a quien quieras gestionar."
+              title="Participantes de la fase"
+              subtitle="Click en un participante para abrir su ficha completa: pagos, edicion, deuda, notas y acciones."
             >
+              <div className="mb-4 flex flex-wrap gap-2">
+                {([
+                  { id: 'cursando', label: `Cursando (${cursandoInPhaseCount})` },
+                  { id: 'finalizados', label: `Finalizados (${finalizedInPhaseCount})` },
+                  { id: 'todos', label: `Todos (${phaseParticipantsAll.length})` },
+                ] as const).map((option) => {
+                  const isActive = enrollmentStatusFilter === option.id;
+                  return (
+                    <Link
+                      key={option.id}
+                      href={buildAdminHref({
+                        edition: selectedEdition?.slug,
+                        phase: selectedPhase?.slug,
+                        q,
+                        level: levelParam,
+                        tab: 'finance',
+                        enrollmentStatus: option.id,
+                      })}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                        isActive
+                          ? 'border-emerald-400/60 bg-emerald-400/15 text-white'
+                          : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                      }`}
+                    >
+                      {option.label}
+                    </Link>
+                  );
+                })}
+              </div>
+
               {phaseParticipants.length ? (
-                <div className="grid gap-4">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {phaseParticipants.map((enrollment) => {
                     const paid = sumConfirmedPayments(enrollment.payments);
                     const pending = Math.max(enrollment.amountDueCents - paid, 0);
+                    const progress =
+                      enrollment.amountDueCents > 0
+                        ? Math.min(Math.round((paid / enrollment.amountDueCents) * 100), 100)
+                        : 0;
+                    const fullUser = userById.get(enrollment.userId);
+                    if (!fullUser) return null;
+                    const statusUpper = String(enrollment.status).toUpperCase();
+                    const isFinalized = statusUpper === 'FINALIZADO';
 
                     return (
-                      <details
+                      <div
                         key={enrollment.id}
-                        className="rounded-3xl border border-white/10 bg-black/20 p-5 open:border-emerald-400/30 open:bg-black/30"
+                        className={`flex flex-col justify-between gap-3 rounded-2xl border p-4 ${
+                          isFinalized
+                            ? 'border-emerald-300/30 bg-emerald-400/5'
+                            : 'border-white/10 bg-black/25'
+                        }`}
                       >
-                        <summary className="cursor-pointer list-none">
-                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-white/90">
                                 {enrollment.user.name ?? 'Sin nombre'}
                               </p>
-                              <p className="mt-1 text-xs text-white/50">{enrollment.user.email ?? '-'}</p>
-                              <p className="mt-2 text-xs text-white/60">
-                                Rol: {roleLabel(enrollment.user.role)} - Estado global:{' '}
-                                {statusLabel(enrollment.user.status)}
-                              </p>
-                              <p className="mt-3 text-sm text-white/60">
-                                {enrollment.phase ? `${enrollment.phase.title} - ` : ''}
-                                Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Pagado:{' '}
-                                {formatMoney(paid, enrollment.currency)} - Pendiente:{' '}
-                                {formatMoney(pending, enrollment.currency)}
-                              </p>
+                              <p className="mt-1 text-xs text-white/55">{enrollment.user.email ?? '-'}</p>
                             </div>
-
-                            <div className="flex flex-col items-start gap-3 lg:items-end">
-                              <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
-                                {enrollmentStatusLabel(enrollment.status)}
-                              </div>
-                              <span className="text-xs text-emerald-200/80">
-                                Click para ver pagos y acciones
-                              </span>
-                            </div>
+                            <span
+                              className={`rounded-full border px-2 py-1 text-[10px] font-semibold tracking-wide ${
+                                progress >= 100
+                                  ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'
+                                  : progress >= 60
+                                  ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-100'
+                                  : 'border-amber-300/40 bg-amber-300/10 text-amber-100'
+                              }`}
+                            >
+                              {progress}%
+                            </span>
                           </div>
-
-                          <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-                            <PaymentProgress
-                              paid={paid}
-                              due={enrollment.amountDueCents}
-                              currency={enrollment.currency}
+                          <p className="mt-3 text-xs text-white/60">
+                            Total {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Debe{' '}
+                            <span className="font-semibold text-white/80">
+                              {formatMoney(pending, enrollment.currency)}
+                            </span>
+                          </p>
+                          <p
+                            className={`mt-1 text-[11px] uppercase tracking-wider ${
+                              isFinalized ? 'font-semibold text-emerald-200' : 'text-white/40'
+                            }`}
+                          >
+                            {enrollmentStatusLabel(enrollment.status)}
+                          </p>
+                          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                progress >= 100
+                                  ? 'bg-emerald-400'
+                                  : progress >= 60
+                                  ? 'bg-cyan-400'
+                                  : 'bg-amber-300'
+                              }`}
+                              style={{ width: `${progress}%` }}
                             />
                           </div>
-                        </summary>
-
-                        <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr,1fr]">
-                          <form action={upsertEnrollment} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-                            <input type="hidden" name="userId" value={enrollment.userId} />
-                            <input type="hidden" name="editionId" value={enrollment.editionId} />
-                            <input type="hidden" name="phaseId" value={enrollment.phase?.id ?? ''} />
-                            <input type="hidden" name="currency" value={enrollment.currency} />
-                            <input type="hidden" name="returnTab" value="finance" />
-
-                            <p className="text-sm font-semibold text-white/80">
-                              Actualizar ficha de {enrollment.phase?.title ?? 'la fase'}
-                            </p>
-
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <label className="grid gap-1">
-                                <span className="text-xs text-white/60">Monto total</span>
-                                <input
-                                  name="amountDue"
-                                  defaultValue={String(enrollment.amountDueCents / 100)}
-                                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                />
-                              </label>
-
-                              <label className="grid gap-1">
-                                <span className="text-xs text-white/60">Estado</span>
-                                <select
-                                  name="status"
-                                  defaultValue={enrollment.status}
-                                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                >
-                                  <option value="PENDIENTE">Pendiente</option>
-                                  <option value="RESERVADO">Reservado</option>
-                                  <option value="CONFIRMADO">Confirmado</option>
-                                  <option value="CURSANDO">Cursando</option>
-                                  <option value="FINALIZADO">Finalizado</option>
-                                  <option value="CANCELADO">Cancelado</option>
-                                </select>
-                              </label>
-                            </div>
-
-                            <label className="grid gap-1">
-                              <span className="text-xs text-white/60">Notas</span>
-                              <input
-                                name="notes"
-                                defaultValue={enrollment.notes ?? ''}
-                                className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                              />
-                            </label>
-
-                            <FormSubmitButton
-                              className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
-                              pendingLabel="Actualizando ficha..."
-                            >
-                              Actualizar ficha
-                            </FormSubmitButton>
-                          </form>
-
-                          <form action={recordPayment} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-                            <input type="hidden" name="enrollmentId" value={enrollment.id} />
-                            <input type="hidden" name="currency" value={enrollment.currency} />
-                            <input type="hidden" name="returnTab" value="finance" />
-
-                            <p className="text-sm font-semibold text-white/80">Registrar pago</p>
-
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <label className="grid gap-1">
-                                <span className="text-xs text-white/60">Monto</span>
-                                <input
-                                  name="amount"
-                                  defaultValue="0"
-                                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                  placeholder="50000"
-                                />
-                              </label>
-
-                              <label className="grid gap-1">
-                                <span className="text-xs text-white/60">Fecha</span>
-                                <input
-                                  name="paidAt"
-                                  type="date"
-                                  defaultValue={new Date().toISOString().slice(0, 10)}
-                                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                />
-                              </label>
-                            </div>
-
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <label className="grid gap-1">
-                                <span className="text-xs text-white/60">Metodo</span>
-                                <select
-                                  name="method"
-                                  defaultValue="TRANSFERENCIA"
-                                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                >
-                                  <option value="TRANSFERENCIA">Transferencia</option>
-                                  <option value="EFECTIVO">Efectivo</option>
-                                  <option value="MERCADO_PAGO">Mercado Pago</option>
-                                  <option value="TARJETA">Tarjeta</option>
-                                  <option value="OTRO">Otro</option>
-                                </select>
-                              </label>
-
-                              <label className="grid gap-1">
-                                <span className="text-xs text-white/60">Estado</span>
-                                <select
-                                  name="status"
-                                  defaultValue="CONFIRMADO"
-                                  className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                >
-                                  <option value="CONFIRMADO">Confirmado</option>
-                                  <option value="PENDIENTE">Pendiente</option>
-                                  <option value="CANCELADO">Cancelado</option>
-                                  <option value="DEVUELTO">Devuelto</option>
-                                </select>
-                              </label>
-                            </div>
-
-                            <label className="grid gap-1">
-                              <span className="text-xs text-white/60">Referencia</span>
-                              <input
-                                name="reference"
-                                className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                                placeholder="Comprobante, alias, observacion corta..."
-                              />
-                            </label>
-
-                            <label className="grid gap-1">
-                              <span className="text-xs text-white/60">Notas</span>
-                              <input
-                                name="notes"
-                                className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                              />
-                            </label>
-
-                            <FormSubmitButton
-                              className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
-                              pendingLabel="Guardando pago..."
-                            >
-                              Cargar pago
-                            </FormSubmitButton>
-                          </form>
                         </div>
-
-                        {enrollment.payments.length ? (
-                          <div className="mt-5 grid gap-3">
-                            {enrollment.payments.map((payment) => (
-                              <div key={payment.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                  <div>
-                                    <p className="text-sm font-semibold text-white/90">
-                                      {formatMoney(payment.amountCents, payment.currency)}
-                                    </p>
-                                    <p className="mt-1 text-xs text-white/50">
-                                      {new Date(payment.paidAt).toLocaleDateString()}
-                                    </p>
-                                  </div>
-                                  <form action={deletePayment}>
-                                    <input type="hidden" name="paymentId" value={payment.id} />
-                                    <input type="hidden" name="editionSlug" value={selectedEdition?.slug ?? ''} />
-                                    <input type="hidden" name="phaseSlug" value={selectedPhase?.slug ?? ''} />
-                                    <input type="hidden" name="returnTab" value="finance" />
-                                    <FormSubmitButton
-                                      className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-400/10 px-3 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20"
-                                      pendingLabel="Borrando..."
-                                      confirmMessage="Seguro quieres borrar este registro de pago?"
-                                    >
-                                      Borrar pago
-                                    </FormSubmitButton>
-                                  </form>
-                                </div>
-                                <p className="mt-2 text-xs text-white/60">
-                                  {paymentMethodLabel(payment.method)} - {paymentStatusLabel(payment.status)}
-                                </p>
-                                {payment.reference ? (
-                                  <p className="mt-1 text-xs text-white/50">Referencia: {payment.reference}</p>
-                                ) : null}
-                                {payment.notes ? (
-                                  <p className="mt-1 text-xs text-white/50">Nota: {payment.notes}</p>
-                                ) : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="mt-5 text-sm text-white/70">Todavia no hay pagos para este participante.</p>
-                        )}
-                      </details>
+                        <UserDetailModal
+                          user={fullUser}
+                          editions={editionsForModal}
+                          selectedEditionSlug={selectedEdition?.slug ?? null}
+                          selectedPhaseSlug={selectedPhase?.slug ?? null}
+                          buttonLabel="Abrir ficha"
+                        />
+                      </div>
                     );
                   })}
                 </div>
@@ -995,125 +941,867 @@ export default async function AdminPage({
 
                 {filteredRoots.length ? (
                   <div className="mt-6">
-                    <div className="tree">{filteredRoots.map((root) => renderTree(root, 0, maxDepth))}</div>
+                    <div className="tree">
+                      {filteredRoots.map((root) =>
+                        renderClickableTree(root, 0, maxDepth)
+                      )}
+                    </div>
+                    <p className="mt-4 text-xs text-white/45">
+                      Click en cualquier participante para abrir su ficha: estado del proceso, referente, fichas por fase, pagos y logros.
+                    </p>
                   </div>
                 ) : (
                   <p className="mt-6 text-sm text-white/70">Sin usuarios cargados todavia.</p>
                 )}
               </div>
             </SectionShell>
+          </div>
+        ) : null}
+
+        {activeTab === 'aula' ? (
+          <div className="mt-8 grid gap-8">
+            <SectionShell
+              title="Tarea general por fase"
+              subtitle="La misma tarea para todos los participantes que cursen esa fase, en cualquier edicion. Tipica para Fase 1."
+            >
+              <form action={createWeeklyTask} className="grid gap-3 rounded-2xl border border-white/10 bg-black/25 p-5 md:grid-cols-2">
+                <input type="hidden" name="scope" value="GENERAL" />
+                <p className="text-sm font-semibold text-white/85 md:col-span-2">Nueva tarea general</p>
+
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Fase (numero)</span>
+                  <select
+                    name="phaseSequence"
+                    required
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>
+                      Elegir fase
+                    </option>
+                    {phaseSequenceOptions.map((option) => (
+                      <option key={option.sequence} value={option.sequence}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Semana</span>
+                  <input
+                    name="weekNumber"
+                    type="number"
+                    min="1"
+                    defaultValue="1"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                  />
+                </label>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Titulo</span>
+                  <input
+                    name="title"
+                    required
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="Lectura semana 1 - Introduccion"
+                  />
+                </label>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Resumen corto</span>
+                  <input
+                    name="summary"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="Que tiene que hacer el participante esta semana"
+                  />
+                </label>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Descripcion (opcional)</span>
+                  <textarea
+                    name="body"
+                    rows={3}
+                    className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-white/90 outline-none"
+                  />
+                </label>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Link al recurso (PDF, video, articulo)</span>
+                  <input
+                    name="resourceUrl"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="https://..."
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Fecha limite (opcional)</span>
+                  <input
+                    name="dueAt"
+                    type="date"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                  />
+                </label>
+
+                <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                  <input name="isPublished" type="checkbox" defaultChecked className="accent-emerald-400" />
+                  Publicar inmediatamente
+                </label>
+
+                <div className="md:col-span-2">
+                  <FormSubmitButton
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                    pendingLabel="Guardando..."
+                  >
+                    Crear tarea general
+                  </FormSubmitButton>
+                </div>
+              </form>
+            </SectionShell>
 
             <SectionShell
-              title="Gestion por usuario"
-              subtitle="Actualiza estados globales y corrige referencias manuales."
+              title="Tareas personales por participante"
+              subtitle="Cada usuario tiene su propio historial de tareas. Tipico para Fase 2: 8 consignas semanales individuales hasta egresar."
             >
-              {q.trim() ? (
-                <p className="mb-4 text-sm text-white/70">
-                  Mostrando <span className="font-semibold text-white/90">{usersForManagement.length}</span> resultado(s).
-                </p>
-              ) : null}
+              <div className="grid gap-3">
+                {users.map((u) => {
+                  const userTasks = weeklyTasks
+                    .filter((task) => task.assignedUserId === u.id)
+                    .sort((left, right) => left.weekNumber - right.weekNumber);
+                  const nextWeek =
+                    userTasks.length > 0
+                      ? Math.max(...userTasks.map((task) => task.weekNumber)) + 1
+                      : 1;
 
-              <div className="grid gap-4">
-                {usersForManagement.map((user) => (
-                  <div key={user.id} className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white/90">{user.name ?? 'Sin nombre'}</p>
-                        <p className="mt-1 text-xs text-white/50">{user.email ?? '-'}</p>
-                        <p className="mt-2 text-xs text-white/60">
-                          Rol: {roleLabel(user.role)} - Estado: {statusLabel(user.status)} - {user.pointsBalance} pts
-                        </p>
-                        {user.referralCode ? (
-                          <p className="mt-1 text-xs text-white/60">
-                            Codigo: <span className="font-semibold text-white/80">{user.referralCode}</span>
-                          </p>
-                        ) : null}
-                        {user.enrollments.length ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {user.enrollments.map((enrollment) => (
-                              <span
-                                key={enrollment.id}
-                                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/70"
-                              >
-                                {enrollment.edition.title}
-                                {enrollment.phase ? ` - ${enrollment.phase.title}` : ''}
-                              </span>
-                            ))}
+                  return (
+                    <details
+                      key={u.id}
+                      className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4 open:border-amber-300/40"
+                    >
+                      <summary className="cursor-pointer">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white/90">
+                              {u.name ?? 'Sin nombre'}
+                            </p>
+                            <p className="truncate text-xs text-white/55">{u.email ?? '-'}</p>
+                            {u.godAssignment?.god ? (
+                              <p className="mt-1 text-[11px] text-amber-100/80">
+                                Dios: {u.godAssignment.god.name}
+                              </p>
+                            ) : null}
                           </div>
-                        ) : null}
-                      </div>
+                          <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-100">
+                            {userTasks.length} tarea(s)
+                          </span>
+                        </div>
+                      </summary>
 
-                      <form action={updateUserStatus} className="grid gap-3 sm:min-w-[360px]">
-                        <input type="hidden" name="userId" value={user.id} />
+                      <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr,1fr]">
+                        <div className="grid gap-2">
+                          <p className="text-xs font-semibold text-amber-100/90">Historial</p>
+                          {userTasks.length ? (
+                            userTasks.map((task) => (
+                              <details
+                                key={task.id}
+                                className="rounded-xl border border-white/10 bg-slate-950/40 p-3 open:border-amber-300/30"
+                              >
+                                <summary className="cursor-pointer">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-semibold text-white/90">
+                                        Semana {task.weekNumber} - {task.title}
+                                      </p>
+                                      <p className="mt-1 text-[11px] text-white/55">
+                                        {task.isPublished ? 'Publicada' : 'Borrador'}
+                                        {task.dueAt
+                                          ? ` - Hasta ${new Date(task.dueAt).toLocaleDateString()}`
+                                          : ''}
+                                      </p>
+                                    </div>
+                                    {task.resourceUrl ? (
+                                      <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-100">
+                                        PDF
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </summary>
 
-                        <div className="grid gap-3 sm:grid-cols-[1fr,auto]">
-                          <select
-                            name="toStatus"
-                            defaultValue={user.status}
-                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none focus:border-emerald-400/50"
-                          >
-                            <option value="INTERESADO">Interesado</option>
-                            <option value="FASE_1">Fase 1</option>
-                            <option value="PROCESO_ACTIVO">Proceso activo</option>
-                            <option value="EGRESADO">Egresado</option>
-                          </select>
+                                <form
+                                  action={updateWeeklyTaskAction}
+                                  className="mt-3 grid gap-2 md:grid-cols-2"
+                                >
+                                  <input type="hidden" name="taskId" value={task.id} />
+                                  <input type="hidden" name="assignedUserId" value={u.id} />
+                                  <label className="grid gap-1 md:col-span-2">
+                                    <span className="text-[10px] text-white/55">Titulo</span>
+                                    <input
+                                      name="title"
+                                      defaultValue={task.title}
+                                      className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1">
+                                    <span className="text-[10px] text-white/55">Semana</span>
+                                    <input
+                                      name="weekNumber"
+                                      type="number"
+                                      min="1"
+                                      defaultValue={String(task.weekNumber)}
+                                      className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1">
+                                    <span className="text-[10px] text-white/55">Fecha limite</span>
+                                    <input
+                                      name="dueAt"
+                                      type="date"
+                                      defaultValue={
+                                        task.dueAt
+                                          ? new Date(task.dueAt).toISOString().slice(0, 10)
+                                          : ''
+                                      }
+                                      className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1 md:col-span-2">
+                                    <span className="text-[10px] text-white/55">
+                                      PDF / link recurso
+                                    </span>
+                                    <input
+                                      name="resourceUrl"
+                                      defaultValue={task.resourceUrl ?? ''}
+                                      className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                                      placeholder="https://..."
+                                    />
+                                  </label>
+                                  <label className="grid gap-1 md:col-span-2">
+                                    <span className="text-[10px] text-white/55">Resumen</span>
+                                    <input
+                                      name="summary"
+                                      defaultValue={task.summary ?? ''}
+                                      className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                                    />
+                                  </label>
+                                  <label className="grid gap-1 md:col-span-2">
+                                    <span className="text-[10px] text-white/55">Cuerpo</span>
+                                    <textarea
+                                      name="body"
+                                      rows={2}
+                                      defaultValue={task.body ?? ''}
+                                      className="rounded-lg border border-white/10 bg-slate-950/70 p-2 text-xs text-white/90 outline-none"
+                                    />
+                                  </label>
+                                  <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-white/70 md:col-span-2">
+                                    <input
+                                      name="isPublished"
+                                      type="checkbox"
+                                      defaultChecked={task.isPublished}
+                                      className="accent-emerald-400"
+                                    />
+                                    Publicada
+                                  </label>
+                                  <div className="flex flex-wrap gap-2 md:col-span-2">
+                                    <FormSubmitButton
+                                      className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-500 px-3 text-xs font-semibold text-black transition hover:bg-emerald-400"
+                                      pendingLabel="Guardando..."
+                                    >
+                                      Guardar
+                                    </FormSubmitButton>
+                                  </div>
+                                </form>
 
-                          <button
-                            className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
-                            type="submit"
-                          >
-                            Guardar estado
-                          </button>
+                                <form action={deleteWeeklyTaskAction} className="mt-2">
+                                  <input type="hidden" name="taskId" value={task.id} />
+                                  <FormSubmitButton
+                                    className="inline-flex h-8 items-center justify-center rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 text-[11px] font-semibold text-rose-100 transition hover:bg-rose-400/20"
+                                    pendingLabel="Borrando..."
+                                    confirmMessage="Eliminar esta tarea?"
+                                  >
+                                    Eliminar
+                                  </FormSubmitButton>
+                                </form>
+                              </details>
+                            ))
+                          ) : (
+                            <p className="text-xs text-white/55">Sin tareas todavia.</p>
+                          )}
                         </div>
 
-                        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-                          <input name="awardReferrer" type="checkbox" className="accent-emerald-400" />
-                          Otorgar puntos al referente si entra a Fase 1
-                        </label>
-                      </form>
-                    </div>
-
-                    <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-                      <p className="text-sm font-semibold text-white/80">Referencia</p>
-
-                      {isSuperadminRole(session.user.role) ? (
-                        <form action={linkUserReferrer} className="mt-3 grid gap-3 md:grid-cols-[1fr,auto]">
-                          <input type="hidden" name="userId" value={user.id} />
-
-                          <select
-                            name="referredById"
-                            defaultValue={user.referredById ?? ''}
-                            className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                        <form
+                          action={createWeeklyTask}
+                          className="grid gap-2 rounded-xl border border-amber-300/30 bg-slate-950/40 p-3"
+                        >
+                          <input type="hidden" name="scope" value="PERSONAL" />
+                          <input type="hidden" name="assignedUserId" value={u.id} />
+                          <input type="hidden" name="isPublished" value="on" />
+                          <p className="text-xs font-semibold text-amber-100/90">
+                            Agregar tarea semanal
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-[80px,1fr]">
+                            <label className="grid gap-1">
+                              <span className="text-[10px] text-white/55">Semana</span>
+                              <input
+                                name="weekNumber"
+                                type="number"
+                                min="1"
+                                defaultValue={String(nextWeek)}
+                                className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                              />
+                            </label>
+                            <label className="grid gap-1">
+                              <span className="text-[10px] text-white/55">Fecha limite (opcional)</span>
+                              <input
+                                name="dueAt"
+                                type="date"
+                                className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                              />
+                            </label>
+                          </div>
+                          <label className="grid gap-1">
+                            <span className="text-[10px] text-white/55">Titulo</span>
+                            <input
+                              name="title"
+                              required
+                              className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                              placeholder="Consigna de la semana"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-[10px] text-white/55">PDF / link recurso</span>
+                            <input
+                              name="resourceUrl"
+                              className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                              placeholder="https://..."
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-[10px] text-white/55">Resumen (opcional)</span>
+                            <input
+                              name="summary"
+                              className="h-9 rounded-lg border border-white/10 bg-slate-950/70 px-3 text-xs text-white/90 outline-none"
+                            />
+                          </label>
+                          <FormSubmitButton
+                            className="inline-flex h-9 items-center justify-center rounded-lg bg-amber-300 px-3 text-xs font-semibold text-black transition hover:bg-amber-200"
+                            pendingLabel="Guardando..."
                           >
-                            <option value="">Sin referente</option>
-                            {users
-                              .filter((candidate) => candidate.id !== user.id)
-                              .map((candidate) => (
-                                <option key={candidate.id} value={candidate.id}>
-                                  {(candidate.name ?? 'Sin nombre') +
-                                    (candidate.email ? ` - ${candidate.email}` : '')}
-                                </option>
-                              ))}
-                          </select>
-
-                          <button
-                            type="submit"
-                            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
-                          >
-                            Guardar referencia
-                          </button>
+                            Agregar tarea
+                          </FormSubmitButton>
                         </form>
-                      ) : (
-                        <p className="mt-3 text-sm text-white/60">
-                          {user.referredBy
-                            ? `Invitado/a por ${user.referredBy.name ?? user.referredBy.email ?? 'Sin dato'}`
-                            : 'Sin referente cargado.'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                      </div>
+                    </details>
+                  );
+                })}
               </div>
+            </SectionShell>
+
+            <SectionShell
+              title="Tareas generales cargadas"
+              subtitle="Solo tareas globales por fase. Las personales se gestionan en la seccion de cada participante."
+            >
+              <div className="grid gap-3">
+                {(() => {
+                  const generalTasks = weeklyTasks.filter((task) => !task.assignedUserId);
+                  return generalTasks.length ? (
+                  generalTasks.map((task) => {
+                    const isPersonal = false;
+                    const targetUser = null;
+                    return (
+                      <details
+                        key={task.id}
+                        className={`rounded-2xl border p-4 open:border-emerald-400/30 ${
+                          isPersonal
+                            ? 'border-amber-300/25 bg-amber-300/5'
+                            : 'border-emerald-300/20 bg-emerald-400/5'
+                        }`}
+                      >
+                        <summary className="cursor-pointer">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-white/90">
+                                Semana {task.weekNumber} - {task.title}
+                              </p>
+                              <p className="mt-1 text-xs text-white/55">
+                                {isPersonal
+                                  ? `Personal: ${targetUser?.name ?? targetUser?.email ?? 'Usuario'}`
+                                  : `General - Fase ${task.phaseSequence ?? '?'}`}
+                                {task.isPublished ? ' - Publicada' : ' - Borrador'}
+                              </p>
+                            </div>
+                            {task.dueAt ? (
+                              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70">
+                                Hasta {new Date(task.dueAt).toLocaleDateString()}
+                              </span>
+                            ) : null}
+                          </div>
+                        </summary>
+                        <form action={updateWeeklyTaskAction} className="mt-3 grid gap-3 md:grid-cols-2">
+                          <input type="hidden" name="taskId" value={task.id} />
+                          <label className="grid gap-1 md:col-span-2">
+                            <span className="text-xs text-white/55">Titulo</span>
+                            <input
+                              name="title"
+                              defaultValue={task.title}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-xs text-white/55">Semana</span>
+                            <input
+                              name="weekNumber"
+                              type="number"
+                              min="1"
+                              defaultValue={String(task.weekNumber)}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                          </label>
+                          <label className="grid gap-1">
+                            <span className="text-xs text-white/55">Fecha limite</span>
+                            <input
+                              name="dueAt"
+                              type="date"
+                              defaultValue={task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 10) : ''}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                          </label>
+                          {isPersonal ? (
+                            <label className="grid gap-1 md:col-span-2">
+                              <span className="text-xs text-white/55">Participante</span>
+                              <select
+                                name="assignedUserId"
+                                defaultValue={task.assignedUserId ?? ''}
+                                className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                              >
+                                {users.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {(u.name ?? 'Sin nombre') + (u.email ? ` - ${u.email}` : '')}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : (
+                            <label className="grid gap-1 md:col-span-2">
+                              <span className="text-xs text-white/55">Fase</span>
+                              <select
+                                name="phaseSequence"
+                                defaultValue={String(task.phaseSequence ?? '')}
+                                className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                              >
+                                {phaseSequenceOptions.map((option) => (
+                                  <option key={option.sequence} value={option.sequence}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          <label className="grid gap-1 md:col-span-2">
+                            <span className="text-xs text-white/55">Resumen</span>
+                            <input
+                              name="summary"
+                              defaultValue={task.summary ?? ''}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                          </label>
+                          <label className="grid gap-1 md:col-span-2">
+                            <span className="text-xs text-white/55">Cuerpo</span>
+                            <textarea
+                              name="body"
+                              rows={3}
+                              defaultValue={task.body ?? ''}
+                              className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-white/90 outline-none"
+                            />
+                          </label>
+                          <label className="grid gap-1 md:col-span-2">
+                            <span className="text-xs text-white/55">Link recurso</span>
+                            <input
+                              name="resourceUrl"
+                              defaultValue={task.resourceUrl ?? ''}
+                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                            />
+                          </label>
+                          <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 md:col-span-2">
+                            <input
+                              name="isPublished"
+                              type="checkbox"
+                              defaultChecked={task.isPublished}
+                              className="accent-emerald-400"
+                            />
+                            Publicada
+                          </label>
+                          <div className="flex flex-wrap gap-2 md:col-span-2">
+                            <FormSubmitButton
+                              className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                              pendingLabel="Guardando..."
+                            >
+                              Guardar cambios
+                            </FormSubmitButton>
+                          </div>
+                        </form>
+                        <form action={deleteWeeklyTaskAction} className="mt-3">
+                          <input type="hidden" name="taskId" value={task.id} />
+                          <FormSubmitButton
+                            className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-400/10 px-3 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20"
+                            pendingLabel="Borrando..."
+                            confirmMessage="Eliminar esta tarea?"
+                          >
+                            Eliminar tarea
+                          </FormSubmitButton>
+                        </form>
+                      </details>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-white/65">No hay tareas generales todavia.</p>
+                );
+                })()}
+              </div>
+            </SectionShell>
+          </div>
+        ) : null}
+
+        {activeTab === 'news' ? (
+          <div className="mt-8 grid gap-8">
+            <SectionShell
+              title="Banner de noticias"
+              subtitle="Las noticias activas se muestran arriba del dashboard a todos los participantes. Sirve para avisos, recordatorios y novedades del taller."
+            >
+              <form action={createNewsPost} className="grid gap-3 rounded-2xl border border-white/10 bg-black/25 p-5 md:grid-cols-2">
+                <p className="text-sm font-semibold text-white/85 md:col-span-2">Nueva noticia</p>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Titulo</span>
+                  <input
+                    name="title"
+                    required
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="Cambio de horario - clase del jueves"
+                  />
+                </label>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Cuerpo</span>
+                  <textarea
+                    name="body"
+                    rows={3}
+                    className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-white/90 outline-none"
+                    placeholder="Explicacion breve para los participantes"
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Imagen (URL)</span>
+                  <input
+                    name="imageUrl"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="https://..."
+                  />
+                </label>
+
+                <label className="grid gap-1">
+                  <span className="text-xs text-white/60">Texto del boton (opcional)</span>
+                  <input
+                    name="ctaLabel"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="Leer mas"
+                  />
+                </label>
+
+                <label className="grid gap-1 md:col-span-2">
+                  <span className="text-xs text-white/60">Link del boton (opcional)</span>
+                  <input
+                    name="ctaUrl"
+                    className="h-11 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                    placeholder="https://..."
+                  />
+                </label>
+
+                <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                  <input name="isPublished" type="checkbox" defaultChecked className="accent-emerald-400" />
+                  Publicada
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                  <input name="isPinned" type="checkbox" className="accent-emerald-400" />
+                  Fijada al tope
+                </label>
+
+                <div className="md:col-span-2">
+                  <FormSubmitButton
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                    pendingLabel="Publicando..."
+                  >
+                    Publicar noticia
+                  </FormSubmitButton>
+                </div>
+              </form>
+
+              <div className="mt-6 grid gap-3">
+                {newsPosts.length ? (
+                  newsPosts.map((post) => (
+                    <details
+                      key={post.id}
+                      className="rounded-2xl border border-white/10 bg-black/20 p-4 open:border-emerald-400/30"
+                    >
+                      <summary className="cursor-pointer">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-white/90">{post.title}</p>
+                            <p className="mt-1 text-xs text-white/55">
+                              {post.isPublished ? 'Publicada' : 'Borrador'}
+                              {post.isPinned ? ' - Fijada' : ''}
+                            </p>
+                          </div>
+                          <span className="text-xs text-white/55">
+                            {new Date(post.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </summary>
+
+                      <form action={updateNewsPostAction} className="mt-3 grid gap-3 md:grid-cols-2">
+                        <input type="hidden" name="newsId" value={post.id} />
+                        <label className="grid gap-1 md:col-span-2">
+                          <span className="text-xs text-white/55">Titulo</span>
+                          <input
+                            name="title"
+                            defaultValue={post.title}
+                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <label className="grid gap-1 md:col-span-2">
+                          <span className="text-xs text-white/55">Cuerpo</span>
+                          <textarea
+                            name="body"
+                            rows={3}
+                            defaultValue={post.body ?? ''}
+                            className="rounded-xl border border-white/10 bg-slate-950/70 p-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-xs text-white/55">Imagen URL</span>
+                          <input
+                            name="imageUrl"
+                            defaultValue={post.imageUrl ?? ''}
+                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-xs text-white/55">Boton texto</span>
+                          <input
+                            name="ctaLabel"
+                            defaultValue={post.ctaLabel ?? ''}
+                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <label className="grid gap-1 md:col-span-2">
+                          <span className="text-xs text-white/55">Boton URL</span>
+                          <input
+                            name="ctaUrl"
+                            defaultValue={post.ctaUrl ?? ''}
+                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                          <input
+                            name="isPublished"
+                            type="checkbox"
+                            defaultChecked={post.isPublished}
+                            className="accent-emerald-400"
+                          />
+                          Publicada
+                        </label>
+                        <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                          <input
+                            name="isPinned"
+                            type="checkbox"
+                            defaultChecked={post.isPinned}
+                            className="accent-emerald-400"
+                          />
+                          Fijada
+                        </label>
+                        <div className="md:col-span-2">
+                          <FormSubmitButton
+                            className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                            pendingLabel="Guardando..."
+                          >
+                            Guardar cambios
+                          </FormSubmitButton>
+                        </div>
+                      </form>
+                      <form action={deleteNewsPostAction} className="mt-3">
+                        <input type="hidden" name="newsId" value={post.id} />
+                        <FormSubmitButton
+                          className="inline-flex h-9 items-center justify-center rounded-xl border border-rose-400/30 bg-rose-400/10 px-3 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/20"
+                          pendingLabel="Borrando..."
+                          confirmMessage="Eliminar esta noticia?"
+                        >
+                          Eliminar noticia
+                        </FormSubmitButton>
+                      </form>
+                    </details>
+                  ))
+                ) : (
+                  <p className="text-sm text-white/65">Todavia no hay noticias. Crea la primera arriba.</p>
+                )}
+              </div>
+            </SectionShell>
+          </div>
+        ) : null}
+
+        {activeTab === 'gods' ? (
+          <div className="mt-8 grid gap-8">
+            <SectionShell
+              title="Catalogo de dioses griegos"
+              subtitle="Click en un dios para ver / editar / cargar su PDF. Cuando lo tengas listo, asignas a cada usuario en la seccion de abajo."
+            >
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-white/55">
+                  {gods.length} dios(es) cargado(s)
+                </p>
+                <GodFormModal mode="create" />
+              </div>
+
+              {gods.length ? (
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                  {gods.map((god) => (
+                    <GodFormModal key={god.id} mode="edit" god={god} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-white/65">
+                  Todavia no hay dioses cargados. Crea el primero con el boton de arriba.
+                </p>
+              )}
+            </SectionShell>
+
+            <SectionShell
+              title="Asignaciones por usuario"
+              subtitle="Los dioses se asignan despues de Fase 2. Eligi la edicion y veras solo a quienes la estan cursando o ya completaron, mas a los egresados."
+            >
+              {(() => {
+                const godsEditionSlug =
+                  (searchParams?.godsEdition ?? '').toString().trim() ||
+                  selectedEdition?.slug ||
+                  editions.find((e) => e.isCurrent)?.slug ||
+                  editions[0]?.slug ||
+                  '';
+                const godsEditionData =
+                  editions.find((edition) => edition.slug === godsEditionSlug) ?? null;
+
+                const eligibleUsers = users.filter((u) => {
+                  if (String(u.status).toUpperCase() === 'EGRESADO') return true;
+                  if (!godsEditionData) return false;
+                  return u.enrollments.some((entry) => {
+                    if (entry.editionId !== godsEditionData.id) return false;
+                    const sequence = entry.phase?.sequence ?? 0;
+                    if (sequence < 2) return false;
+                    const status = String(entry.status).toUpperCase();
+                    return status === 'CURSANDO' || status === 'FINALIZADO';
+                  });
+                });
+
+                return (
+                  <>
+                    <div className="mb-5 flex flex-wrap items-center gap-2">
+                      <span className="text-xs uppercase tracking-wider text-white/55">
+                        Edicion:
+                      </span>
+                      {editions.map((edition) => {
+                        const isActive = godsEditionSlug === edition.slug;
+                        const params = new URLSearchParams();
+                        params.set('tab', 'gods');
+                        params.set('godsEdition', edition.slug);
+                        if (selectedEdition?.slug) params.set('edition', selectedEdition.slug);
+                        if (selectedPhase?.slug) params.set('phase', selectedPhase.slug);
+                        return (
+                          <Link
+                            key={edition.id}
+                            href={`/admin?${params.toString()}`}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                              isActive
+                                ? 'border-amber-300/60 bg-amber-300/15 text-amber-100'
+                                : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'
+                            }`}
+                          >
+                            {edition.title}
+                          </Link>
+                        );
+                      })}
+                      <span className="ml-auto text-xs text-white/45">
+                        {eligibleUsers.length} participante(s) elegibles
+                      </span>
+                    </div>
+
+                    {eligibleUsers.length ? (
+                      <div className="grid gap-3">
+                        {eligibleUsers.map((u) => {
+                          const assignment = u.godAssignment ?? null;
+                          return (
+                            <form
+                              key={u.id}
+                              action={assignGodToUser}
+                              className="grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[1.2fr,1fr,1fr,auto] md:items-end"
+                            >
+                              <input type="hidden" name="userId" value={u.id} />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-white/90">
+                                  {u.name ?? 'Sin nombre'}
+                                </p>
+                                <p className="truncate text-xs text-white/55">{u.email ?? '-'}</p>
+                                <p className="mt-1 text-[11px] text-white/45">
+                                  Estado: {statusLabel(u.status)}
+                                </p>
+                                {assignment?.god ? (
+                                  <p className="mt-1 text-xs text-amber-200/90">
+                                    Asignado: {assignment.god.name}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <label className="grid gap-1">
+                                <span className="text-xs text-white/55">Dios</span>
+                                <select
+                                  name="godId"
+                                  defaultValue={assignment?.godId ?? ''}
+                                  className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                                >
+                                  <option value="">Sin asignacion</option>
+                                  {gods.map((god) => (
+                                    <option key={god.id} value={god.id}>
+                                      {god.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="grid gap-1">
+                                <span className="text-xs text-white/55">
+                                  PDF personalizado (opcional)
+                                </span>
+                                <input
+                                  name="customPdfUrl"
+                                  defaultValue={assignment?.customPdfUrl ?? ''}
+                                  className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                                  placeholder="https://..."
+                                />
+                              </label>
+                              <FormSubmitButton
+                                className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-400"
+                                pendingLabel="Guardando..."
+                              >
+                                Guardar
+                              </FormSubmitButton>
+                            </form>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-white/55">
+                        En {godsEditionData?.title ?? 'esta edicion'} todavia nadie esta cursando Fase 2 o adelante. Cuando alguien pase a Fase 2 va a aparecer aca automaticamente.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </SectionShell>
           </div>
         ) : null}
@@ -1345,32 +2033,60 @@ export default async function AdminPage({
                           <form
                             key={phase.id}
                             action={updateAdminEditionPhase}
-                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1.2fr,140px,1fr,auto]"
+                            className="grid gap-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3 md:grid-cols-[1fr,80px,120px,1fr,auto]"
                           >
                             <input type="hidden" name="phaseId" value={phase.id} />
-                            <input type="hidden" name="sequence" value={String(phase.sequence)} />
-                            <input
-                              name="title"
-                              defaultValue={phase.title}
-                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                            />
-                            <input
-                              name="price"
-                              defaultValue={formatMoneyInput(phase.priceCents)}
-                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                              placeholder="150000"
-                            />
-                            <input
-                              name="notes"
-                              defaultValue={phase.notes ?? ''}
-                              className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                            />
-                            <button
-                              type="submit"
-                              className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
-                            >
-                              Guardar
-                            </button>
+                            <label className="grid gap-1">
+                              <span className="text-[10px] uppercase tracking-wider text-white/45">
+                                Titulo
+                              </span>
+                              <input
+                                name="title"
+                                defaultValue={phase.title}
+                                className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                              />
+                            </label>
+                            <label className="grid gap-1">
+                              <span className="text-[10px] uppercase tracking-wider text-white/45">
+                                Orden
+                              </span>
+                              <input
+                                name="sequence"
+                                type="number"
+                                min="1"
+                                defaultValue={String(phase.sequence)}
+                                className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                              />
+                            </label>
+                            <label className="grid gap-1">
+                              <span className="text-[10px] uppercase tracking-wider text-white/45">
+                                Precio
+                              </span>
+                              <input
+                                name="price"
+                                defaultValue={formatMoneyInput(phase.priceCents)}
+                                className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                                placeholder="150000"
+                              />
+                            </label>
+                            <label className="grid gap-1">
+                              <span className="text-[10px] uppercase tracking-wider text-white/45">
+                                Notas
+                              </span>
+                              <input
+                                name="notes"
+                                defaultValue={phase.notes ?? ''}
+                                className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                              />
+                            </label>
+                            <div className="flex items-end">
+                              <button
+                                type="submit"
+                                className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+                              >
+                                Guardar
+                              </button>
+                            </div>
                           </form>
                         ))
                       ) : (

@@ -153,3 +153,122 @@ drop trigger if exists gift_invitations_set_updated_at on public.gift_invitation
 create trigger gift_invitations_set_updated_at
 before update on public.gift_invitations
 for each row execute function public.set_updated_at();
+
+create table if not exists public.weekly_tasks (
+  id uuid primary key default gen_random_uuid(),
+  edition_id uuid not null references public.editions(id) on delete cascade,
+  phase_id uuid references public.edition_phases(id) on delete cascade,
+  week_number integer not null default 1,
+  title text not null,
+  summary text,
+  body text,
+  resource_url text,
+  due_at timestamptz,
+  is_published boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists weekly_tasks_phase_idx on public.weekly_tasks (phase_id, week_number, sort_order);
+
+alter table public.weekly_tasks
+  alter column edition_id drop not null;
+
+alter table public.weekly_tasks
+  add column if not exists phase_sequence integer;
+
+alter table public.weekly_tasks
+  add column if not exists assigned_user_id uuid references public.users(id) on delete cascade;
+
+create index if not exists weekly_tasks_phase_seq_idx on public.weekly_tasks (phase_sequence, week_number);
+create index if not exists weekly_tasks_assigned_user_idx on public.weekly_tasks (assigned_user_id, week_number);
+
+create table if not exists public.user_achievements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  edition_id uuid references public.editions(id) on delete set null,
+  phase_id uuid references public.edition_phases(id) on delete set null,
+  title text not null,
+  description text,
+  icon text,
+  awarded_by_id uuid references public.users(id) on delete set null,
+  awarded_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_achievements_user_idx on public.user_achievements (user_id, awarded_at desc);
+
+drop trigger if exists user_achievements_set_updated_at on public.user_achievements;
+create trigger user_achievements_set_updated_at
+before update on public.user_achievements
+for each row execute function public.set_updated_at();
+
+create table if not exists public.news_posts (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text,
+  image_url text,
+  cta_label text,
+  cta_url text,
+  audience text not null default 'ALL',
+  edition_id uuid references public.editions(id) on delete set null,
+  phase_id uuid references public.edition_phases(id) on delete set null,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  is_pinned boolean not null default false,
+  is_published boolean not null default true,
+  created_by_id uuid references public.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists news_posts_published_idx on public.news_posts (is_published, is_pinned, created_at desc);
+
+create table if not exists public.greek_gods (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  epithet text,
+  description text,
+  pdf_url text,
+  image_url text,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.user_god_assignments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  god_id uuid not null references public.greek_gods(id) on delete cascade,
+  custom_pdf_url text,
+  notes text,
+  assigned_by_id uuid references public.users(id) on delete set null,
+  assigned_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id)
+);
+
+drop trigger if exists weekly_tasks_set_updated_at on public.weekly_tasks;
+create trigger weekly_tasks_set_updated_at
+before update on public.weekly_tasks
+for each row execute function public.set_updated_at();
+
+drop trigger if exists news_posts_set_updated_at on public.news_posts;
+create trigger news_posts_set_updated_at
+before update on public.news_posts
+for each row execute function public.set_updated_at();
+
+drop trigger if exists greek_gods_set_updated_at on public.greek_gods;
+create trigger greek_gods_set_updated_at
+before update on public.greek_gods
+for each row execute function public.set_updated_at();
+
+drop trigger if exists user_god_assignments_set_updated_at on public.user_god_assignments;
+create trigger user_god_assignments_set_updated_at
+before update on public.user_god_assignments
+for each row execute function public.set_updated_at();

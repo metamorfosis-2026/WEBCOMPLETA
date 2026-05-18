@@ -1,6 +1,14 @@
 export const DEFAULT_SUPERADMIN_EMAIL = 'gestiones.metamorfosis@gmail.com';
 
-export const USER_STATUS_OPTIONS = ['INTERESADO', 'FASE_1', 'PROCESO_ACTIVO', 'EGRESADO'] as const;
+export const USER_STATUS_OPTIONS = [
+  'INTERESADO',
+  'FASE_1',
+  'FASE_2',
+  'FASE_3',
+  'PROCESO_ACTIVO',
+  'EGRESADO',
+  'ABANDONO',
+] as const;
 export const ENROLLMENT_STATUS_OPTIONS = [
   'PENDIENTE',
   'RESERVADO',
@@ -69,10 +77,16 @@ export function statusLabel(status: string | null | undefined) {
   switch (normalizeUserStatus(status)) {
     case 'FASE_1':
       return 'Fase 1';
+    case 'FASE_2':
+      return 'Fase 2';
+    case 'FASE_3':
+      return 'Fase 3';
     case 'PROCESO_ACTIVO':
       return 'Proceso activo';
     case 'EGRESADO':
       return 'Egresado/a';
+    case 'ABANDONO':
+      return 'Abandono';
     case 'INTERESADO':
     default:
       return 'Interesado/a';

@@ -107,6 +107,83 @@ export type DbGiftInvitation = {
   updated_at: string;
 };
 
+export type DbWeeklyTask = {
+  id: string;
+  edition_id: string | null;
+  phase_id: string | null;
+  phase_sequence: number | null;
+  assigned_user_id: string | null;
+  week_number: number;
+  title: string;
+  summary: string | null;
+  body: string | null;
+  resource_url: string | null;
+  due_at: string | null;
+  is_published: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbNewsPost = {
+  id: string;
+  title: string;
+  body: string | null;
+  image_url: string | null;
+  cta_label: string | null;
+  cta_url: string | null;
+  audience: string;
+  edition_id: string | null;
+  phase_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_pinned: boolean;
+  is_published: boolean;
+  created_by_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbGreekGod = {
+  id: string;
+  slug: string;
+  name: string;
+  epithet: string | null;
+  description: string | null;
+  pdf_url: string | null;
+  image_url: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbUserAchievement = {
+  id: string;
+  user_id: string;
+  edition_id: string | null;
+  phase_id: string | null;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  awarded_by_id: string | null;
+  awarded_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DbUserGodAssignment = {
+  id: string;
+  user_id: string;
+  god_id: string;
+  custom_pdf_url: string | null;
+  notes: string | null;
+  assigned_by_id: string | null;
+  assigned_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 function assertNoError(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
@@ -222,6 +299,93 @@ export function mapGiftInvitation(invitation: DbGiftInvitation) {
     recipientPhone: invitation.recipient_phone,
     createdAt: invitation.created_at,
     updatedAt: invitation.updated_at,
+  };
+}
+
+export function mapWeeklyTask(task: DbWeeklyTask) {
+  return {
+    id: task.id,
+    editionId: task.edition_id,
+    phaseId: task.phase_id,
+    phaseSequence: task.phase_sequence != null ? Number(task.phase_sequence) : null,
+    assignedUserId: task.assigned_user_id,
+    weekNumber: Number(task.week_number ?? 1),
+    title: task.title,
+    summary: task.summary,
+    body: task.body,
+    resourceUrl: task.resource_url,
+    dueAt: task.due_at,
+    isPublished: Boolean(task.is_published),
+    sortOrder: Number(task.sort_order ?? 0),
+    createdAt: task.created_at,
+    updatedAt: task.updated_at,
+  };
+}
+
+export function mapNewsPost(post: DbNewsPost) {
+  return {
+    id: post.id,
+    title: post.title,
+    body: post.body,
+    imageUrl: post.image_url,
+    ctaLabel: post.cta_label,
+    ctaUrl: post.cta_url,
+    audience: post.audience,
+    editionId: post.edition_id,
+    phaseId: post.phase_id,
+    startsAt: post.starts_at,
+    endsAt: post.ends_at,
+    isPinned: Boolean(post.is_pinned),
+    isPublished: Boolean(post.is_published),
+    createdById: post.created_by_id,
+    createdAt: post.created_at,
+    updatedAt: post.updated_at,
+  };
+}
+
+export function mapGreekGod(god: DbGreekGod) {
+  return {
+    id: god.id,
+    slug: god.slug,
+    name: god.name,
+    epithet: god.epithet,
+    description: god.description,
+    pdfUrl: god.pdf_url,
+    imageUrl: god.image_url,
+    sortOrder: Number(god.sort_order ?? 0),
+    isActive: Boolean(god.is_active),
+    createdAt: god.created_at,
+    updatedAt: god.updated_at,
+  };
+}
+
+export function mapUserAchievement(achievement: DbUserAchievement) {
+  return {
+    id: achievement.id,
+    userId: achievement.user_id,
+    editionId: achievement.edition_id,
+    phaseId: achievement.phase_id,
+    title: achievement.title,
+    description: achievement.description,
+    icon: achievement.icon,
+    awardedById: achievement.awarded_by_id,
+    awardedAt: achievement.awarded_at,
+    createdAt: achievement.created_at,
+    updatedAt: achievement.updated_at,
+  };
+}
+
+export function mapUserGodAssignment(assignment: DbUserGodAssignment) {
+  return {
+    id: assignment.id,
+    userId: assignment.user_id,
+    godId: assignment.god_id,
+    customPdfUrl: assignment.custom_pdf_url,
+    notes: assignment.notes,
+    assignedById: assignment.assigned_by_id,
+    assignedAt: assignment.assigned_at,
+    createdAt: assignment.created_at,
+    updatedAt: assignment.updated_at,
   };
 }
 
@@ -595,6 +759,228 @@ export async function saveGiftInvitation(
     .single<DbGiftInvitation>();
   assertNoError(error);
   return mapGiftInvitation(data);
+}
+
+export async function listWeeklyTasks() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('weekly_tasks')
+    .select('*')
+    .order('week_number', { ascending: true })
+    .order('sort_order', { ascending: true });
+  assertNoError(error);
+  return (data ?? []).map(mapWeeklyTask);
+}
+
+export async function getWeeklyTaskById(id: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('weekly_tasks').select('*').eq('id', id).maybeSingle<DbWeeklyTask>();
+  assertNoError(error);
+  return data ? mapWeeklyTask(data) : null;
+}
+
+export async function insertWeeklyTask(values: Partial<DbWeeklyTask> & { title: string }) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('weekly_tasks').insert(values).select('*').single<DbWeeklyTask>();
+  assertNoError(error);
+  return mapWeeklyTask(data);
+}
+
+export async function updateWeeklyTask(id: string, values: Partial<DbWeeklyTask>) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('weekly_tasks')
+    .update(values)
+    .eq('id', id)
+    .select('*')
+    .single<DbWeeklyTask>();
+  assertNoError(error);
+  return mapWeeklyTask(data);
+}
+
+export async function deleteWeeklyTaskById(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('weekly_tasks').delete().eq('id', id);
+  assertNoError(error);
+}
+
+export async function listNewsPosts() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('news_posts')
+    .select('*')
+    .order('is_pinned', { ascending: false })
+    .order('created_at', { ascending: false });
+  assertNoError(error);
+  return (data ?? []).map(mapNewsPost);
+}
+
+export async function getNewsPostById(id: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('news_posts').select('*').eq('id', id).maybeSingle<DbNewsPost>();
+  assertNoError(error);
+  return data ? mapNewsPost(data) : null;
+}
+
+export async function insertNewsPost(values: Partial<DbNewsPost> & { title: string }) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('news_posts').insert(values).select('*').single<DbNewsPost>();
+  assertNoError(error);
+  return mapNewsPost(data);
+}
+
+export async function updateNewsPost(id: string, values: Partial<DbNewsPost>) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('news_posts')
+    .update(values)
+    .eq('id', id)
+    .select('*')
+    .single<DbNewsPost>();
+  assertNoError(error);
+  return mapNewsPost(data);
+}
+
+export async function deleteNewsPostById(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('news_posts').delete().eq('id', id);
+  assertNoError(error);
+}
+
+export async function listGreekGods() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('greek_gods')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+  assertNoError(error);
+  return (data ?? []).map(mapGreekGod);
+}
+
+export async function getGreekGodById(id: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('greek_gods').select('*').eq('id', id).maybeSingle<DbGreekGod>();
+  assertNoError(error);
+  return data ? mapGreekGod(data) : null;
+}
+
+export async function insertGreekGod(values: Partial<DbGreekGod> & { slug: string; name: string }) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('greek_gods').insert(values).select('*').single<DbGreekGod>();
+  assertNoError(error);
+  return mapGreekGod(data);
+}
+
+export async function updateGreekGod(id: string, values: Partial<DbGreekGod>) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('greek_gods')
+    .update(values)
+    .eq('id', id)
+    .select('*')
+    .single<DbGreekGod>();
+  assertNoError(error);
+  return mapGreekGod(data);
+}
+
+export async function deleteGreekGodById(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('greek_gods').delete().eq('id', id);
+  assertNoError(error);
+}
+
+export async function listUserAchievements() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('user_achievements')
+    .select('*')
+    .order('awarded_at', { ascending: false });
+  assertNoError(error);
+  return (data ?? []).map(mapUserAchievement);
+}
+
+export async function listUserAchievementsByUserId(userId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('user_achievements')
+    .select('*')
+    .eq('user_id', userId)
+    .order('awarded_at', { ascending: false });
+  assertNoError(error);
+  return (data ?? []).map(mapUserAchievement);
+}
+
+export async function insertUserAchievement(
+  values: Partial<DbUserAchievement> & { user_id: string; title: string }
+) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('user_achievements')
+    .insert(values)
+    .select('*')
+    .single<DbUserAchievement>();
+  assertNoError(error);
+  return mapUserAchievement(data);
+}
+
+export async function deleteUserAchievementById(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('user_achievements').delete().eq('id', id);
+  assertNoError(error);
+}
+
+export async function listUserGodAssignments() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('user_god_assignments')
+    .select('*')
+    .order('assigned_at', { ascending: false });
+  assertNoError(error);
+  return (data ?? []).map(mapUserGodAssignment);
+}
+
+export async function getUserGodAssignmentByUserId(userId: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('user_god_assignments')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle<DbUserGodAssignment>();
+  assertNoError(error);
+  return data ? mapUserGodAssignment(data) : null;
+}
+
+export async function upsertUserGodAssignment(
+  values: Partial<DbUserGodAssignment> & { user_id: string; god_id: string }
+) {
+  const supabase = createAdminClient();
+  const existing = await getUserGodAssignmentByUserId(values.user_id);
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('user_god_assignments')
+      .update(values)
+      .eq('id', existing.id)
+      .select('*')
+      .single<DbUserGodAssignment>();
+    assertNoError(error);
+    return mapUserGodAssignment(data);
+  }
+
+  const { data, error } = await supabase
+    .from('user_god_assignments')
+    .insert(values)
+    .select('*')
+    .single<DbUserGodAssignment>();
+  assertNoError(error);
+  return mapUserGodAssignment(data);
+}
+
+export async function deleteUserGodAssignmentByUserId(userId: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('user_god_assignments').delete().eq('user_id', userId);
+  assertNoError(error);
 }
 
 export async function generateReferralCode() {
