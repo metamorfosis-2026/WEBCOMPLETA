@@ -180,8 +180,8 @@ function FadeInAutoplayVideo({
   );
 }
 
-const WORKSHOP_KICKER = 'TALLER VIVENCIAL · MARZO 2026';
-const WORKSHOP_LABEL = 'Metamorfosis — Marzo 2026';
+const WORKSHOP_KICKER = 'TALLER VIVENCIAL · MAYO 2026';
+const WORKSHOP_LABEL = 'Metamorfosis — Mayo 2026';
 const WORKSHOP_TITLE_IMAGE_URL =
   'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/META%20TEXTO%20PNG.png';
 const WORKSHOP_HOOK =
@@ -245,10 +245,12 @@ function Section({
               ) : null}
               <div className="mt-5 flex justify-center">
                 <a
-                  href="#contacto-form"
+                  href="https://ig.me/m/metamorfosis.vip"
+                  target="_blank"
+                  rel="noreferrer"
                   className="inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-emerald-400/90 to-cyan-300/90 px-7 text-sm font-extrabold tracking-wide text-slate-950 outline-none transition hover:from-emerald-300/90 hover:to-cyan-200/90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
                 >
-                  Inscripciónes para MARZO..!
+                  Inscripciónes para 30 y 31 DE MAYO..!
                 </a>
               </div>
             </div>

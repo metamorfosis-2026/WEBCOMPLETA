@@ -15,6 +15,7 @@ export function SplineBackground({
         type="module"
         src="https://unpkg.com/@splinetool/viewer@1.12.51/build/spline-viewer.js"
         strategy="afterInteractive"
+        crossOrigin="anonymous"
       />
       <spline-viewer url={scene} />
     </div>

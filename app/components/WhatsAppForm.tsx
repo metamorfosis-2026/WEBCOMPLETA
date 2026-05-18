@@ -18,7 +18,10 @@ export function WhatsAppForm({
   workshopLabel?: string;
 }) {
   const whatsappBusinessNumber =
-    process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '54911XXXXXXXXXX';
+    process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '5491164450430';
+  const instagramUsername =
+    process.env.NEXT_PUBLIC_INSTAGRAM_USERNAME ?? 'metamorfosis.vip';
+  const instagramDmUrl = `https://ig.me/m/${instagramUsername}`;
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -122,6 +125,20 @@ export function WhatsAppForm({
         >
           O escribe algo diferente
         </a>
+
+        <div className="mt-2 flex flex-col items-center gap-2 sm:flex-row sm:justify-center sm:gap-3">
+          <span className="text-xs uppercase tracking-wider text-white/45">
+            Tambien por
+          </span>
+          <a
+            href={instagramDmUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-fuchsia-400/30 bg-gradient-to-r from-fuchsia-500/15 via-rose-500/10 to-amber-400/15 px-4 text-xs font-bold text-white transition hover:from-fuchsia-500/25 hover:to-amber-400/25"
+          >
+            Instagram (DM directo)
+          </a>
+        </div>
       </div>
 
       <p className="mt-6 text-center text-xs text-white/40">
