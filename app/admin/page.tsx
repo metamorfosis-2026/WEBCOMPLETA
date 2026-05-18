@@ -15,6 +15,7 @@ import { getAdminData } from '@/app/lib/supabase/views';
 import { ActionNotice } from './ActionNotice';
 import { FormSubmitButton } from './FormSubmitButton';
 import { GodFormModal } from './GodFormModal';
+import { PersonalTasksModal } from './PersonalTasksModal';
 import { UserDetailModal } from './UserDetailModal';
 import {
   assignGodToUser,
@@ -1062,9 +1063,114 @@ export default async function AdminPage({
 
             <SectionShell
               title="Tareas personales por participante"
-              subtitle="Cada usuario tiene su propio historial de tareas. Tipico para Fase 2: 8 consignas semanales individuales hasta egresar."
+              subtitle="Solo aparecen quienes estan en Fase 2 o 3 y los egresados. Click en una card para ver / cargar tareas semanales (8 consignas tipicas hasta egresar)."
             >
-              <div className="grid gap-3">
+              {(() => {
+                const isEligibleInEdition = (
+                  userId: string,
+                  editionId: string
+                ): { eligible: boolean; phaseSeq: number | null; statusUpper: string } => {
+                  const u = users.find((x) => x.id === userId);
+                  if (!u) return { eligible: false, phaseSeq: null, statusUpper: '' };
+                  for (const entry of u.enrollments) {
+                    if (entry.editionId !== editionId) continue;
+                    const seq = entry.phase?.sequence ?? 0;
+                    if (seq < 2) continue;
+                    const statusUpper = String(entry.status).toUpperCase();
+                    if (statusUpper === 'CURSANDO' || statusUpper === 'FINALIZADO') {
+                      return { eligible: true, phaseSeq: seq, statusUpper };
+                    }
+                  }
+                  return { eligible: false, phaseSeq: null, statusUpper: '' };
+                };
+
+                const editionGroups = editions
+                  .map((edition) => {
+                    const eligible = users
+                      .filter((u) => String(u.status).toUpperCase() !== 'EGRESADO')
+                      .map((u) => ({ u, info: isEligibleInEdition(u.id, edition.id) }))
+                      .filter((row) => row.info.eligible);
+                    return { edition, members: eligible };
+                  })
+                  .filter((group) => group.members.length > 0);
+
+                const egresados = users.filter(
+                  (u) => String(u.status).toUpperCase() === 'EGRESADO'
+                );
+
+                const hasAny = editionGroups.length > 0 || egresados.length > 0;
+
+                if (!hasAny) {
+                  return (
+                    <p className="text-sm text-white/55">
+                      Todavia no hay participantes en Fase 2, Fase 3 o egresados. Cuando alguien avance a Fase 2 va a aparecer aca.
+                    </p>
+                  );
+                }
+
+                return (
+                  <div className="grid gap-8">
+                    {editionGroups.map(({ edition, members }) => (
+                      <div key={edition.id}>
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-200/90">
+                          {edition.title}
+                        </p>
+                        <p className="mt-1 text-[11px] text-white/45">
+                          {members.length} participante(s)
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {members.map(({ u, info }) => {
+                            const userTasks = weeklyTasks.filter(
+                              (task) => task.assignedUserId === u.id
+                            );
+                            const stageLabel = info.phaseSeq
+                              ? info.statusUpper === 'FINALIZADO'
+                                ? `Fase ${info.phaseSeq} completada`
+                                : `Cursando Fase ${info.phaseSeq}`
+                              : undefined;
+                            return (
+                              <PersonalTasksModal
+                                key={u.id}
+                                user={u}
+                                userTasks={userTasks}
+                                badge={stageLabel}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+
+                    {egresados.length ? (
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-200/90">
+                          Egresados/as
+                        </p>
+                        <p className="mt-1 text-[11px] text-white/45">
+                          {egresados.length} participante(s)
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {egresados.map((u) => {
+                            const userTasks = weeklyTasks.filter(
+                              (task) => task.assignedUserId === u.id
+                            );
+                            return (
+                              <PersonalTasksModal
+                                key={u.id}
+                                user={u}
+                                userTasks={userTasks}
+                                badge="Egresado/a"
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
+              {false && (
+                <div className="grid gap-3">
                 {users.map((u) => {
                   const userTasks = weeklyTasks
                     .filter((task) => task.assignedUserId === u.id)
@@ -1295,6 +1401,7 @@ export default async function AdminPage({
                   );
                 })}
               </div>
+              )}
             </SectionShell>
 
             <SectionShell

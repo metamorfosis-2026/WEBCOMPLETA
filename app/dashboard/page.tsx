@@ -5,6 +5,7 @@ import { auth } from '@/auth';
 import { DashboardBackground } from '@/app/components/DashboardBackground';
 import { GiftCouponPanel } from '@/app/components/GiftCouponPanel';
 import { GreekGodPanel } from '@/app/components/GreekGodPanel';
+import { MaterialViewer } from '@/app/components/MaterialViewer';
 import { NewsBanner } from '@/app/components/NewsBanner';
 import { getGiftCouponState } from '@/app/lib/gifts';
 import {
@@ -284,14 +285,20 @@ export default async function DashboardPage() {
                         <p className="mt-2 whitespace-pre-line text-sm text-white/65">{task.body}</p>
                       ) : null}
                       {task.resourceUrl ? (
-                        <a
-                          href={task.resourceUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-3 inline-flex h-9 items-center justify-center rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
-                        >
-                          Abrir material
-                        </a>
+                        <div className="mt-3">
+                          <MaterialViewer
+                            url={task.resourceUrl}
+                            title={task.title}
+                            badge={
+                              isPersonal
+                                ? `Semana ${task.weekNumber} - Personal`
+                                : task.phaseSequence != null
+                                ? `Semana ${task.weekNumber} - Fase ${task.phaseSequence}`
+                                : `Semana ${task.weekNumber}`
+                            }
+                            triggerLabel="Abrir material"
+                          />
+                        </div>
                       ) : null}
                     </article>
                   );
