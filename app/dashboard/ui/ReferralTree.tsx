@@ -41,10 +41,10 @@ function NodeCard({ node, right }: { node: ReferralNode; right?: React.ReactNode
       <div className="min-w-0 flex-1">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white/90">{node.name ?? 'Sin nombre'}</p>
-            <p className="truncate text-xs text-white/50">{node.email ?? '—'}</p>
+            <p className="truncate text-[14px] font-semibold text-ivory/90">{node.name ?? 'Sin nombre'}</p>
+            <p className="truncate text-[12px] text-ivory/45">{node.email ?? '—'}</p>
           </div>
-          <div className="text-xs font-semibold text-white/70">{statusLabel(node.status)}</div>
+          <span className="chip flex-none">{statusLabel(node.status)}</span>
         </div>
         {right ? <div className="mt-2">{right}</div> : null}
       </div>
@@ -64,8 +64,9 @@ export function ReferralTree({
   return (
     <div className="grid gap-5">
       <div>
-        <p className="text-xs font-bold tracking-wide text-emerald-200/90">ÁRBOL DE COMUNIDAD</p>
-        <p className="mt-2 text-sm text-white/70">
+        <p className="eyebrow">Comunidad</p>
+        <h2 className="display mt-3 text-[1.5rem] leading-tight sm:text-[1.75rem]">Tu árbol</h2>
+        <p className="mt-2 max-w-prose text-[14px] leading-relaxed text-ivory/55">
           Visualización simple de invitaciones. Compartir es opcional y consciente.
         </p>
       </div>
@@ -73,7 +74,7 @@ export function ReferralTree({
       <NodeCard
         node={root}
         right={
-          <p className="text-xs text-white/60">
+          <p className="text-[12px] text-ivory/45">
             Este sos vos. Abajo se muestran tus referencias directas{maxDepth >= 2 ? ' y su siguiente nivel.' : '.'}
           </p>
         }
@@ -97,7 +98,7 @@ export function ReferralTree({
                       ))}
                     </div>
                     {level2.length > 8 ? (
-                      <p className="mt-2 text-xs text-white/50">+{level2.length - 8} más…</p>
+                      <p className="mt-2 text-[12px] text-ivory/40">+{level2.length - 8} más…</p>
                     ) : null}
                   </div>
                 ) : null}
@@ -106,7 +107,7 @@ export function ReferralTree({
           })}
         </div>
       ) : (
-        <p className="text-sm text-white/70">
+        <p className="text-[14px] leading-relaxed text-ivory/50">
           Todavía no hay referencias directas. Está bien: esto no es una obligación.
         </p>
       )}

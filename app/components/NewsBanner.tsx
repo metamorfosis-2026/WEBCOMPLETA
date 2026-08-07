@@ -38,37 +38,34 @@ export function NewsBanner({ posts }: { posts: NewsItem[] }) {
   if (!visible.length) return null;
 
   return (
-    <section aria-label="Noticias" className="mb-6 grid gap-3">
+    <section aria-label="Noticias" className="grid gap-3">
       {visible.map((post) => (
-        <article
-          key={post.id}
-          className="relative overflow-hidden rounded-3xl border border-emerald-300/30 bg-gradient-to-br from-emerald-400/15 via-cyan-300/10 to-slate-950 p-5 shadow-[0_18px_50px_rgba(16,185,129,0.18)] sm:p-6"
-        >
+        <article key={post.id} className="surface surface-accent overflow-hidden p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             {post.imageUrl ? (
               <img
                 src={post.imageUrl}
                 alt=""
-                className="h-24 w-24 flex-none rounded-2xl border border-white/10 object-cover"
+                className="h-24 w-24 flex-none rounded-2xl border border-ivory/10 object-cover"
               />
             ) : null}
-            <div className="flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-100/90">
+            <div className="min-w-0 flex-1">
+              <span className="chip chip-celeste">
                 {post.isPinned ? 'Aviso fijado' : 'Aviso del taller'}
-              </p>
-              <h3 className="mt-2 text-base font-semibold text-white sm:text-lg">{post.title}</h3>
+              </span>
+              <h3 className="display mt-3 text-[1.35rem] leading-tight text-ivory">{post.title}</h3>
               {post.body ? (
-                <p className="mt-2 text-sm leading-6 text-white/80">{post.body}</p>
+                <p className="mt-2 max-w-prose text-[14px] leading-relaxed text-ivory/70">{post.body}</p>
               ) : null}
-              <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div className="mt-4 flex flex-wrap items-center gap-3">
                 {post.ctaUrl ? (
                   <a
                     href={post.ctaUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-9 items-center justify-center rounded-xl border border-emerald-300/40 bg-emerald-400/15 px-3 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/25"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-celeste px-4 text-xs font-extrabold uppercase tracking-[0.12em] text-night transition duration-300 hover:shadow-[0_14px_36px_-14px_rgba(124,201,236,1)]"
                   >
-                    {post.ctaLabel ?? 'Ver mas'}
+                    {post.ctaLabel ?? 'Ver más'}
                   </a>
                 ) : null}
                 {!post.isPinned ? (
@@ -83,9 +80,9 @@ export function NewsBanner({ posts }: { posts: NewsItem[] }) {
                         // ignore storage errors
                       }
                     }}
-                    className="inline-flex h-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 text-xs font-semibold text-white/70 transition hover:bg-white/10"
+                    className="inline-flex h-10 items-center justify-center rounded-xl border border-ivory/12 bg-ivory/[0.05] px-4 text-xs font-bold uppercase tracking-[0.12em] text-ivory/60 transition duration-300 hover:border-ivory/30 hover:text-ivory"
                   >
-                    Marcar como leido
+                    Marcar como leído
                   </button>
                 ) : null}
               </div>

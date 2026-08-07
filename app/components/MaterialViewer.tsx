@@ -52,7 +52,7 @@ export function MaterialViewer({
         onClick={() => setOpen(true)}
         className={
           triggerClassName ??
-          'inline-flex h-9 items-center justify-center rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/20'
+          'inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-celeste/35 bg-celeste/12 px-4 text-xs font-bold uppercase tracking-[0.12em] text-celeste transition duration-300 hover:bg-celeste/20'
         }
       >
         {triggerLabel}
@@ -62,29 +62,30 @@ export function MaterialViewer({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[70] flex items-stretch justify-center bg-slate-950/90 backdrop-blur sm:items-center sm:p-4"
+          className="fixed inset-0 z-[70] flex items-stretch justify-center bg-night/92 backdrop-blur-xl sm:items-center sm:p-4"
         >
           <div
-            className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden border-white/10 bg-slate-950 sm:h-[92vh] sm:rounded-3xl sm:border"
+            className="relative flex h-full w-full max-w-3xl flex-col overflow-hidden border-ivory/12 bg-night sm:h-[92vh] sm:rounded-3xl sm:border"
             onContextMenu={(event) => event.preventDefault()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-emerald-400/10 to-transparent p-4">
+            <div className="flex items-center justify-between gap-3 border-b border-ivory/10 bg-gradient-to-r from-celeste/12 to-transparent p-4">
               <div className="min-w-0">
                 {badge ? (
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-200/90">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-celeste/85">
                     {badge}
                   </p>
                 ) : null}
                 {title ? (
-                  <p className="truncate text-base font-semibold text-white">{title}</p>
+                  <p className="display-sm mt-1 truncate text-[1.05rem] text-ivory">{title}</p>
                 ) : null}
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+                className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full border border-ivory/15 text-ivory/50 transition hover:border-ivory/35 hover:text-ivory"
+                aria-label="Cerrar"
               >
-                Cerrar
+                ✕
               </button>
             </div>
             <iframe

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
+import { ButterflyMark } from '@/app/components/ButterflyMark';
 import { DashboardBackground } from '@/app/components/DashboardBackground';
 import { GiftCouponPanel } from '@/app/components/GiftCouponPanel';
 import { GreekGodPanel } from '@/app/components/GreekGodPanel';
@@ -18,9 +19,69 @@ import {
   sumConfirmedPayments,
 } from '@/app/lib/metamorfosis';
 import SignOutButton from './ui/SignOutButton';
+import { CopyLinkButton } from './ui/CopyLinkButton';
 import { ReferralTree } from './ui/ReferralTree';
 
-function PaymentBar({
+const LOGO_URL = 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/LOGO%20HORIZONTAL.png';
+
+function initials(name?: string | null, email?: string | null) {
+  const base = (name ?? '').trim();
+  if (base) {
+    return base
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase();
+  }
+  return (email ?? 'ME').slice(0, 2).toUpperCase();
+}
+
+function progressOf(paid: number, due: number) {
+  const safeDue = Math.max(due, 0);
+  const safePaid = Math.max(paid, 0);
+  if (safeDue <= 0) return 0;
+  return Math.min(Math.round((safePaid / safeDue) * 100), 100);
+}
+
+/* Etiqueta de sección: mismo lenguaje que la landing (eyebrow + título). */
+function SectionHead({
+  eyebrow,
+  title,
+  subtitle,
+  aside,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle?: string;
+  aside?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0">
+        <p className="eyebrow">{eyebrow}</p>
+        <h2 className="display mt-3 text-[1.5rem] leading-tight sm:text-[1.75rem]">{title}</h2>
+        {subtitle ? (
+          <p className="mt-2 max-w-prose text-[14px] leading-relaxed text-ivory/55">{subtitle}</p>
+        ) : null}
+      </div>
+      {aside ? <div className="flex-none">{aside}</div> : null}
+    </div>
+  );
+}
+
+function Meter({ paid, due }: { paid: number; due: number }) {
+  const progress = progressOf(paid, due);
+  const tone = progress >= 100 ? 'meter-done' : progress >= 60 ? '' : 'meter-warn';
+
+  return (
+    <div className={`meter ${tone}`} role="presentation">
+      <span style={{ width: `${progress}%` }} />
+    </div>
+  );
+}
+
+function PaymentBlock({
   paid,
   due,
   currency,
@@ -29,32 +90,47 @@ function PaymentBar({
   due: number;
   currency: string;
 }) {
-  const safeDue = Math.max(due, 0);
-  const safePaid = Math.max(paid, 0);
-  const progress = safeDue > 0 ? Math.min(Math.round((safePaid / safeDue) * 100), 100) : 0;
-  const remaining = Math.max(safeDue - safePaid, 0);
+  const progress = progressOf(paid, due);
+  const remaining = Math.max(due - paid, 0);
 
   return (
-    <div className="mt-3 grid gap-2">
-      <div className="flex items-center justify-between gap-3 text-xs text-white/60">
-        <span>{progress}% pagado</span>
-        <span>
-          {formatMoney(safePaid, currency)} / {formatMoney(safeDue, currency)}
+    <div className="mt-4 grid gap-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="numeric text-[1.05rem] font-semibold text-ivory">{progress}%</span>
+        <span className="numeric text-[12px] text-ivory/50">
+          {formatMoney(paid, currency)} / {formatMoney(due, currency)}
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-        <div
-          className={`h-full rounded-full transition-all ${
-            progress >= 100 ? 'bg-emerald-400' : progress >= 60 ? 'bg-cyan-400' : 'bg-amber-300'
-          }`}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <p className="text-xs text-white/60">
-        {remaining > 0
-          ? `Te falta ${formatMoney(remaining, currency)}`
-          : 'Pago completo'}
+      <Meter paid={paid} due={due} />
+      <p className="text-[12px] text-ivory/50">
+        {remaining > 0 ? `Te falta ${formatMoney(remaining, currency)}` : 'Pago completo ✓'}
       </p>
+    </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  hint,
+  accent = 'celeste',
+  children,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  accent?: 'celeste' | 'sand' | 'plain';
+  children?: React.ReactNode;
+}) {
+  const valueClass =
+    accent === 'sand' ? 'text-sand' : accent === 'celeste' ? 'text-celeste' : 'text-ivory';
+
+  return (
+    <div className="tile p-4 sm:p-5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ivory/40">{label}</p>
+      <p className={`display-sm mt-2.5 text-[1.35rem] leading-tight ${valueClass}`}>{value}</p>
+      {hint ? <p className="mt-1.5 text-[12px] leading-relaxed text-ivory/45">{hint}</p> : null}
+      {children ? <div className="mt-3">{children}</div> : null}
     </div>
   );
 }
@@ -69,12 +145,16 @@ export default async function DashboardPage() {
   const { user, enrollments, editionSixGift, canGiftEditionSix } = giftState;
   const referralLink = user.referralCode ? `/register?ref=${encodeURIComponent(user.referralCode)}` : null;
 
+  const displayName = user.name?.trim() || user.email || 'Metamorfosis';
+  const firstName = displayName.split(/\s+/)[0];
+
   const totalDue = enrollments.reduce((sum, entry) => sum + entry.amountDueCents, 0);
   const totalPaid = enrollments.reduce(
     (sum, entry) => sum + sumConfirmedPayments(entry.payments),
     0
   );
   const totalPending = Math.max(totalDue - totalPaid, 0);
+  const totalProgress = progressOf(totalPaid, totalDue);
 
   const currentEnrollment =
     enrollments.find((entry) => entry.status === 'CURSANDO') ??
@@ -102,198 +182,223 @@ export default async function DashboardPage() {
       return rightDate - leftDate;
     });
 
+  const adminLink = isAdminRole(user.role) ? (
+    <Link
+      className="inline-flex h-10 items-center justify-center rounded-xl border border-ivory/12 bg-ivory/[0.05] px-4 text-xs font-bold uppercase tracking-[0.12em] text-ivory/80 transition duration-300 hover:border-ivory/30 hover:text-ivory"
+      href="/admin"
+    >
+      Admin
+    </Link>
+  ) : null;
+
   return (
-    <main className="relative min-h-screen text-white">
+    <main className="grain relative min-h-screen text-ivory">
       <DashboardBackground />
-      <div className="mx-auto w-full max-w-5xl px-5 py-10">
-        {user.newsPosts.length ? <NewsBanner posts={user.newsPosts} /> : null}
+
+      {/* Barra fija: la identidad y las acciones quedan siempre a mano. */}
+      <header className="sticky top-0 z-40 border-b border-ivory/10 bg-night/70 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-3 sm:px-8">
+          <Link href="/" className="flex items-center gap-3 transition hover:opacity-80">
+            <ButterflyMark className="h-7 w-7 flex-none text-celeste" strokeWidth={4} />
+            <span className="leading-tight">
+              <span className="block text-[9px] font-bold uppercase tracking-[0.28em] text-ivory/40">
+                Metamorfosis
+              </span>
+              <span className="display-sm block text-[0.95rem] text-ivory">Panel del participante</span>
+            </span>
+          </Link>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="hidden items-center gap-2.5 rounded-full border border-ivory/10 bg-ivory/[0.04] py-1.5 pl-1.5 pr-4 md:inline-flex">
+              <span
+                aria-hidden="true"
+                className="grid h-7 w-7 flex-none place-items-center rounded-full border border-celeste/35 bg-celeste/15 text-[11px] font-bold text-celeste"
+              >
+                {initials(user.name, user.email)}
+              </span>
+              <span className="max-w-[12rem] truncate text-[12px] font-semibold text-ivory/75">
+                {firstName}
+              </span>
+            </span>
+            {adminLink}
+            <SignOutButton />
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto w-full max-w-6xl px-5 pb-24 pt-10 sm:px-8">
+        {/* Hero */}
+        <section className="relative">
+          <div
+            aria-hidden="true"
+            className="aura aura-celeste aura-breathe -top-24 left-1/2 h-[380px] w-[380px] -translate-x-1/2 sm:left-40"
+          />
+
+          <div className="relative">
+            <p className="eyebrow">Tu espacio</p>
+            <h1 className="display mt-4 text-[2rem] leading-[1.05] sm:text-[2.85rem]">
+              Bienvenido/a <span className="em">{firstName}</span>
+              <br className="hidden sm:block" /> a tu proceso.
+            </h1>
+
+            {/* mix-blend en .brand-logo: el PNG viene con fondo negro opaco. */}
+            <img
+              src={LOGO_URL}
+              alt="Metamorfosis"
+              className="brand-logo mt-7 block w-full max-w-sm object-contain sm:max-w-lg"
+            />
+
+            <p className="mt-5 max-w-prose text-[15px] leading-relaxed text-ivory/55">
+              Acá vive todo tu recorrido: la etapa en la que estás, tus materiales, tus pagos y la
+              red que fuiste sumando.
+            </p>
+          </div>
+        </section>
+
+        {user.newsPosts.length ? (
+          <div className="mt-10">
+            <NewsBanner posts={user.newsPosts} />
+          </div>
+        ) : null}
 
         {canGiftEditionSix ? (
-          <div className="mb-8">
+          <div className="mt-10">
             <GiftCouponPanel giftInvitation={editionSixGift} />
           </div>
         ) : null}
 
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex-1 text-center sm:text-left">
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Bienvenido/a{' '}
-              <span className="text-emerald-200 drop-shadow-[0_0_22px_rgba(110,231,183,0.55)]">
-                {user.name?.trim() || user.email || 'Metamorfosis'}
-              </span>{' '}
-              a...
-            </h1>
-            <img
-              src="https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/LOGO%20HORIZONTAL.png"
-              alt="Metamorfosis"
-              className="glow-pulse mx-auto mt-4 block w-full max-w-none object-contain sm:mx-0 sm:mt-6 sm:max-w-xl"
+        {/* Resumen en cuatro datos */}
+        <section className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile
+            label="Etapa actual"
+            value={currentEnrollment?.phase?.title ?? 'Sin fase asignada'}
+            hint={primaryEdition?.title ?? 'Esperando edición'}
+            accent="plain"
+          />
+          <StatTile
+            label="Tu estado"
+            value={statusLabel(user.status)}
+            hint={
+              primaryEdition ? `Sos de ${primaryEdition.title}` : 'Aún no estás asignado a una edición'
+            }
+          />
+          <StatTile
+            label={totalPending > 0 ? 'Pendiente de pago' : 'Pagos'}
+            value={totalPending > 0 ? formatMoney(totalPending) : 'Al día'}
+            hint={totalDue > 0 ? `${totalProgress}% cubierto · ${formatMoney(totalPaid)} pagado` : 'Sin fichas cargadas'}
+            accent={totalPending > 0 ? 'sand' : 'celeste'}
+          >
+            {totalDue > 0 ? <Meter paid={totalPaid} due={totalDue} /> : null}
+          </StatTile>
+          <StatTile
+            label="Tu red"
+            value={`${user.referrals.length} ${user.referrals.length === 1 ? 'persona' : 'personas'}`}
+            hint={`${user.pointsBalance} puntos simbólicos acumulados`}
+            accent="plain"
+          />
+        </section>
+
+        {/* Pagos pendientes: sólo aparece si hay algo por saldar. */}
+        {pendingEnrollments.length ? (
+          <section className="surface mt-6 p-6 sm:p-7">
+            <SectionHead
+              eyebrow="Pagos pendientes"
+              title="Lo que falta saldar"
+              subtitle="Cuando el equipo carga un pago, esta barra se actualiza sola."
             />
-            <p className="glow-pulse mt-4 text-base font-bold uppercase tracking-[0.15em] text-white sm:text-xl sm:tracking-[0.2em]">
-              Este es tu panel virtual de Meta!
-            </p>
-          </div>
-          <div className="hidden items-center gap-3 sm:flex">
-            {isAdminRole(user.role) ? (
-              <Link
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
-                href="/admin"
-              >
-                Admin
-              </Link>
-            ) : null}
-            <SignOutButton />
-          </div>
-        </div>
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-7">
-          <p className="text-xs font-bold tracking-[0.3em] text-emerald-200/90">MI PROCESO</p>
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            {primaryEdition ? (
-              <h2 className="text-lg font-semibold text-white">
-                Sos de <span className="text-emerald-200">{primaryEdition.title}</span>
-              </h2>
-            ) : (
-              <h2 className="text-lg font-semibold text-white/80">Aun no estas asignado a una edicion</h2>
-            )}
-            <p className="text-sm text-white/70">
-              Estas en: <span className="font-semibold text-emerald-200">{statusLabel(user.status)}</span>
-            </p>
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-[10px] uppercase tracking-wider text-white/45">Etapa actual</p>
-              <p className="mt-2 text-base font-semibold text-white">
-                {currentEnrollment?.phase?.title ?? 'Sin fase asignada'}
-              </p>
-              <p className="mt-1 text-xs text-white/55">
-                {currentEnrollment?.edition?.title ?? 'Esperando edicion'}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-[10px] uppercase tracking-wider text-white/45">Cobrado</p>
-              <p className="mt-2 text-base font-semibold text-emerald-200">{formatMoney(totalPaid)}</p>
-              <p className="mt-1 text-xs text-white/55">Suma de todas tus fichas</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-[10px] uppercase tracking-wider text-white/45">Pendiente</p>
-              <p className="mt-2 text-base font-semibold text-amber-200">{formatMoney(totalPending)}</p>
-              <p className="mt-1 text-xs text-white/55">
-                {totalPending > 0 ? 'Aun tenes saldo por pagar' : 'No tenes saldo pendiente'}
-              </p>
-            </div>
-          </div>
-
-          {pendingEnrollments.length ? (
-            <div className="mt-5 grid gap-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-amber-200/90">
-                Pagos pendientes
-              </p>
+            <div className="mt-6 grid gap-3">
               {pendingEnrollments.map(({ entry, paid, pending }) => (
-                <div
-                  key={entry.id}
-                  className="rounded-2xl border border-amber-300/25 bg-amber-300/5 p-4"
-                >
-                  <p className="text-xs text-amber-100/85">
-                    {entry.edition.title}
-                    {entry.phase ? ` - ${entry.phase.title}` : ''}{' '}
-                    <span className="text-white/55">
-                      - Estado: {enrollmentStatusLabel(entry.status)}
-                    </span>
-                  </p>
-                  <PaymentBar
-                    paid={paid}
-                    due={entry.amountDueCents}
-                    currency={entry.currency}
-                  />
-                  <p className="mt-2 text-xs text-amber-100/80">
-                    Te falta abonar{' '}
-                    <span className="font-semibold text-amber-100">
-                      {formatMoney(pending, entry.currency)}
-                    </span>
-                  </p>
+                <div key={entry.id} className="tile tile-accent p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="display-sm text-[1.05rem] text-ivory">
+                        {entry.edition.title}
+                        {entry.phase ? ` · ${entry.phase.title}` : ''}
+                      </p>
+                      <p className="mt-1 text-[12px] text-ivory/45">
+                        Te falta abonar{' '}
+                        <span className="numeric font-semibold text-sand">
+                          {formatMoney(pending, entry.currency)}
+                        </span>
+                      </p>
+                    </div>
+                    <span className="chip chip-sand">{enrollmentStatusLabel(entry.status)}</span>
+                  </div>
+
+                  <PaymentBlock paid={paid} due={entry.amountDueCents} currency={entry.currency} />
                 </div>
               ))}
             </div>
-          ) : null}
+          </section>
+        ) : null}
 
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-xs font-bold tracking-wide text-emerald-200/90">QUIEN TE INVITO</p>
-              <p className="mt-2 text-sm font-semibold text-white">
-                {user.referredBy?.name ?? user.referredBy?.email ?? 'Sin referencia cargada'}
-              </p>
-              {user.referredBy?.email ? (
-                <p className="mt-1 text-xs text-white/55">{user.referredBy.email}</p>
-              ) : null}
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-xs font-bold tracking-wide text-emerald-200/90">A QUIENES INVITASTE</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{user.referrals.length}</p>
-              <p className="mt-1 text-xs text-white/55">Primer nivel de tu red.</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1.4fr,1fr]">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-xs font-bold tracking-[0.3em] text-emerald-200/90">AULA</p>
-            <h2 className="mt-2 text-lg font-semibold text-white">Tareas de la semana</h2>
-            <p className="mt-2 text-sm text-white/65">
-              Las cargamos por fase. Si no ves una tarea, todavia no fue publicada para tu etapa.
-            </p>
+        {/* Aula + acompañamiento */}
+        <section className="mt-6 grid gap-6 lg:grid-cols-[1.45fr,1fr]">
+          <div className="surface p-6 sm:p-7">
+            <SectionHead
+              eyebrow="Aula"
+              title="Tareas de la semana"
+              subtitle="Las publicamos por fase. Si no ves una tarea, todavía no fue liberada para tu etapa."
+              aside={
+                visibleTasks.length ? (
+                  <span className="chip chip-celeste">
+                    {visibleTasks.length} {visibleTasks.length === 1 ? 'tarea' : 'tareas'}
+                  </span>
+                ) : null
+              }
+            />
 
             {visibleTasks.length ? (
-              <div className="mt-5 grid gap-3">
+              <div className="mt-6 grid gap-3">
                 {visibleTasks.map((task) => {
                   const isPersonal = Boolean(task.assignedUserId);
                   return (
                     <article
                       key={task.id}
-                      className={`rounded-2xl border p-4 ${
-                        isPersonal
-                          ? 'border-amber-300/30 bg-amber-300/5'
-                          : 'border-white/10 bg-black/25'
-                      }`}
+                      className={`tile p-4 sm:p-5 ${isPersonal ? 'tile-accent' : ''}`}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
                           <p
-                            className={`text-[10px] uppercase tracking-[0.2em] ${
-                              isPersonal ? 'text-amber-100/90' : 'text-emerald-100/80'
+                            className={`text-[10px] font-bold uppercase tracking-[0.2em] ${
+                              isPersonal ? 'text-sand/85' : 'text-celeste/80'
                             }`}
                           >
                             Semana {task.weekNumber}
                             {isPersonal
-                              ? ' - Personal'
+                              ? ' · Personal'
                               : task.phaseSequence != null
-                              ? ` - Fase ${task.phaseSequence}`
+                              ? ` · Fase ${task.phaseSequence}`
                               : ''}
                           </p>
-                          <h3 className="mt-1 text-base font-semibold text-white">{task.title}</h3>
+                          <h3 className="display-sm mt-2 text-[1.1rem] text-ivory">{task.title}</h3>
                         </div>
                         {task.dueAt ? (
-                          <span className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-semibold text-amber-100">
+                          <span className="chip chip-sand">
                             Hasta {new Date(task.dueAt).toLocaleDateString()}
                           </span>
                         ) : null}
                       </div>
+
                       {task.summary ? (
-                        <p className="mt-2 text-sm text-white/75">{task.summary}</p>
+                        <p className="mt-3 text-[14px] leading-relaxed text-ivory/70">{task.summary}</p>
                       ) : null}
                       {task.body ? (
-                        <p className="mt-2 whitespace-pre-line text-sm text-white/65">{task.body}</p>
+                        <p className="mt-2 whitespace-pre-line text-[14px] leading-relaxed text-ivory/55">
+                          {task.body}
+                        </p>
                       ) : null}
                       {task.resourceUrl ? (
-                        <div className="mt-3">
+                        <div className="mt-4">
                           <MaterialViewer
                             url={task.resourceUrl}
                             title={task.title}
                             badge={
                               isPersonal
-                                ? `Semana ${task.weekNumber} - Personal`
+                                ? `Semana ${task.weekNumber} · Personal`
                                 : task.phaseSequence != null
-                                ? `Semana ${task.weekNumber} - Fase ${task.phaseSequence}`
+                                ? `Semana ${task.weekNumber} · Fase ${task.phaseSequence}`
                                 : `Semana ${task.weekNumber}`
                             }
                             triggerLabel="Abrir material"
@@ -305,114 +410,148 @@ export default async function DashboardPage() {
                 })}
               </div>
             ) : (
-              <p className="mt-5 text-sm text-white/65">
-                Todavia no hay tareas publicadas para tu fase. Te avisaremos cuando esten listas.
-              </p>
+              <div className="tile mt-6 p-6 text-center">
+                <p className="text-[14px] leading-relaxed text-ivory/55">
+                  Todavía no hay tareas publicadas para tu fase.
+                  <br />
+                  Te avisamos acá mismo cuando estén listas.
+                </p>
+              </div>
             )}
           </div>
 
-          <div className="grid gap-6">
+          <div className="grid content-start gap-6">
             <GreekGodPanel assignment={user.godAssignment} />
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-              <p className="text-xs font-bold tracking-[0.3em] text-emerald-200/90">TU INVITACION</p>
+            <div className="surface p-6">
+              <p className="eyebrow">Tu invitación</p>
+              <h2 className="display mt-3 text-[1.4rem] leading-tight">Link personal</h2>
+
               {referralLink ? (
                 <>
-                  <p className="mt-2 text-sm text-white/75">Link personal:</p>
-                  <code className="mt-2 block select-all rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-white/70">
+                  <code className="mt-4 block select-all break-all rounded-xl border border-ivory/10 bg-night/50 p-3 text-[12px] leading-relaxed text-ivory/60">
                     {referralLink}
                   </code>
-                  <p className="mt-3 text-xs text-white/50">Compartir es opcional y consciente.</p>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <CopyLinkButton path={referralLink} />
+                    <p className="text-[12px] text-ivory/40">Compartir es opcional y consciente.</p>
+                  </div>
                 </>
               ) : (
-                <p className="mt-2 text-sm text-white/65">Todavia estamos generando tu link.</p>
+                <p className="mt-4 text-[14px] leading-relaxed text-ivory/55">
+                  Todavía estamos generando tu link.
+                </p>
               )}
+            </div>
+
+            <div className="surface p-6">
+              <p className="eyebrow">Tus puntos</p>
+              <p className="numeric mt-4 text-[2.6rem] font-semibold leading-none text-celeste">
+                {user.pointsBalance}
+              </p>
+              <p className="mt-3 text-[14px] leading-relaxed text-ivory/55">
+                Reconocimiento simbólico por aportar a la comunidad. No representan dinero.
+              </p>
+
+              {user.pointsTransactions.length ? (
+                <div className="mt-5 grid gap-2">
+                  {user.pointsTransactions.slice(0, 4).map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-ivory/8 bg-night/40 px-3 py-2 text-[12px]"
+                    >
+                      <span className="numeric font-bold text-celeste">+{transaction.points}</span>
+                      <span className="text-ivory/45">
+                        {new Date(transaction.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
 
+        {/* Logros */}
         {user.achievements.length ? (
-          <section className="mt-8 rounded-3xl border border-amber-300/25 bg-gradient-to-br from-amber-300/10 via-rose-300/5 to-slate-950/30 p-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold tracking-[0.3em] text-amber-100/90">MIS LOGROS</p>
-                <h2 className="mt-2 text-lg font-semibold text-white">Tu recorrido</h2>
-              </div>
-              <span className="text-xs text-white/55">
-                {user.achievements.length} logro(s) hasta ahora
-              </span>
-            </div>
+          <section className="surface surface-accent mt-6 p-6 sm:p-7">
+            <SectionHead
+              eyebrow="Mis logros"
+              title="Tu recorrido"
+              aside={
+                <span className="chip chip-celeste">
+                  {user.achievements.length} {user.achievements.length === 1 ? 'logro' : 'logros'}
+                </span>
+              }
+            />
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {user.achievements.map((achievement) => (
                 <article
                   key={achievement.id}
-                  className={`rounded-2xl border p-4 ${
-                    achievement.kind === 'DERIVED'
-                      ? 'border-emerald-300/30 bg-emerald-400/5'
-                      : 'border-amber-300/40 bg-amber-300/10'
-                  }`}
+                  className={`tile p-4 sm:p-5 ${achievement.kind === 'DERIVED' ? '' : 'tile-accent'}`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.25em] text-white/55">
-                        {achievement.kind === 'DERIVED' ? 'Etapa completada' : 'Reconocimiento'}
-                      </p>
-                      <h3 className="mt-1 text-base font-semibold text-white">
-                        {achievement.icon ? `${achievement.icon} ` : ''}
-                        {achievement.title}
-                      </h3>
-                      {achievement.description ? (
-                        <p className="mt-1 text-xs text-white/65">{achievement.description}</p>
-                      ) : null}
-                      <p className="mt-2 text-[11px] text-white/45">
-                        {new Date(achievement.awardedAt).toLocaleDateString()}
-                        {achievement.edition ? ` - ${achievement.edition.title}` : ''}
-                        {achievement.phase ? ` - ${achievement.phase.title}` : ''}
-                      </p>
-                    </div>
-                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ivory/40">
+                    {achievement.kind === 'DERIVED' ? 'Etapa completada' : 'Reconocimiento'}
+                  </p>
+                  <h3 className="display-sm mt-2 text-[1.1rem] text-ivory">
+                    {achievement.icon ? `${achievement.icon} ` : ''}
+                    {achievement.title}
+                  </h3>
+                  {achievement.description ? (
+                    <p className="mt-2 text-[13px] leading-relaxed text-ivory/60">
+                      {achievement.description}
+                    </p>
+                  ) : null}
+                  <p className="mt-3 text-[11px] text-ivory/35">
+                    {new Date(achievement.awardedAt).toLocaleDateString()}
+                    {achievement.edition ? ` · ${achievement.edition.title}` : ''}
+                    {achievement.phase ? ` · ${achievement.phase.title}` : ''}
+                  </p>
                 </article>
               ))}
             </div>
           </section>
         ) : null}
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[1.4fr,1fr]">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+        {/* Comunidad */}
+        <section className="mt-6 grid gap-6 lg:grid-cols-[1.45fr,1fr]">
+          <div className="surface p-6 sm:p-7">
             <ReferralTree root={user} maxDepth={2} />
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <p className="text-xs font-bold tracking-[0.3em] text-emerald-200/90">TUS PUNTOS</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{user.pointsBalance}</p>
-            <p className="mt-2 text-sm text-white/65">
-              Reconocimiento simbolico por aportar a la comunidad. No representan dinero.
-            </p>
+          <div className="grid content-start gap-3">
+            <div className="tile p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ivory/40">
+                Quién te invitó
+              </p>
+              <p className="display-sm mt-2.5 text-[1.1rem] text-ivory">
+                {user.referredBy?.name ?? user.referredBy?.email ?? 'Sin referencia cargada'}
+              </p>
+              {user.referredBy?.email ? (
+                <p className="mt-1.5 text-[12px] text-ivory/45">{user.referredBy.email}</p>
+              ) : null}
+            </div>
 
-            {user.pointsTransactions.length ? (
-              <div className="mt-5 grid gap-2 text-xs">
-                {user.pointsTransactions.slice(0, 4).map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2"
-                  >
-                    <span className="font-semibold text-emerald-200">+{transaction.points}</span>
-                    <span className="text-white/55">
-                      {new Date(transaction.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <div className="tile p-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ivory/40">
+                A quiénes invitaste
+              </p>
+              <p className="numeric mt-2.5 text-[2rem] font-semibold leading-none text-ivory">
+                {user.referrals.length}
+              </p>
+              <p className="mt-2 text-[12px] text-ivory/45">Primer nivel de tu red.</p>
+            </div>
           </div>
         </section>
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
-          <h2 className="text-lg font-semibold">Tus ediciones y pagos</h2>
-          <p className="mt-2 text-sm text-white/65">
-            Detalle de cada ficha del equipo y los pagos cargados.
-          </p>
+        {/* Ediciones y pagos */}
+        <section className="surface mt-6 p-6 sm:p-7">
+          <SectionHead
+            eyebrow="Administración"
+            title="Tus ediciones y pagos"
+            subtitle="Detalle de cada ficha del equipo y los pagos cargados."
+          />
 
           {enrollments.length ? (
             <div className="mt-6 grid gap-4">
@@ -421,139 +560,156 @@ export default async function DashboardPage() {
                 const remaining = Math.max(enrollment.amountDueCents - confirmedPaid, 0);
 
                 return (
-                  <div key={enrollment.id} className="rounded-2xl border border-white/10 bg-black/25 p-5">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-emerald-200/90">
+                  <div key={enrollment.id} className="tile p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-celeste/80">
                           {enrollment.edition.title}
                         </p>
-                        <p className="mt-1 text-lg font-semibold text-white">
+                        <p className="display-sm mt-2 text-[1.2rem] text-ivory">
                           {enrollment.phase?.title ?? 'Sin fase'}
                         </p>
-                        <p className="mt-2 text-sm text-white/65">
-                          Total: {formatMoney(enrollment.amountDueCents, enrollment.currency)} - Pagado:{' '}
-                          {formatMoney(confirmedPaid, enrollment.currency)} - Falta:{' '}
+                        <p className="numeric mt-2 text-[13px] text-ivory/55">
+                          Total {formatMoney(enrollment.amountDueCents, enrollment.currency)} · Pagado{' '}
+                          {formatMoney(confirmedPaid, enrollment.currency)} · Falta{' '}
                           {formatMoney(remaining, enrollment.currency)}
                         </p>
                         {enrollment.notes ? (
-                          <p className="mt-2 text-xs text-white/55">Nota del equipo: {enrollment.notes}</p>
+                          <p className="mt-2 text-[12px] text-ivory/45">
+                            Nota del equipo: {enrollment.notes}
+                          </p>
                         ) : null}
                       </div>
 
-                      <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/75">
+                      <span className={`chip ${remaining > 0 ? 'chip-sand' : 'chip-celeste'}`}>
                         {enrollmentStatusLabel(enrollment.status)}
-                      </div>
+                      </span>
                     </div>
 
-                    <PaymentBar
+                    <PaymentBlock
                       paid={confirmedPaid}
                       due={enrollment.amountDueCents}
                       currency={enrollment.currency}
                     />
 
                     {enrollment.payments.length ? (
-                      <div className="mt-5 grid gap-3">
+                      <div className="mt-5 grid gap-2">
                         {enrollment.payments.map((payment) => (
-                          <div key={payment.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <p className="text-sm font-semibold text-white/90">
+                          <div
+                            key={payment.id}
+                            className="rounded-xl border border-ivory/8 bg-night/40 p-4"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="numeric text-[15px] font-semibold text-ivory/90">
                                 {formatMoney(payment.amountCents, payment.currency)}
                               </p>
-                              <p className="text-xs text-white/55">
+                              <p className="text-[12px] text-ivory/45">
                                 {new Date(payment.paidAt).toLocaleDateString()}
                               </p>
                             </div>
-                            <p className="mt-2 text-xs text-white/60">
-                              {paymentMethodLabel(payment.method)} - {paymentStatusLabel(payment.status)}
+                            <p className="mt-1.5 text-[12px] text-ivory/55">
+                              {paymentMethodLabel(payment.method)} · {paymentStatusLabel(payment.status)}
                             </p>
                             {payment.reference ? (
-                              <p className="mt-1 text-xs text-white/50">Referencia: {payment.reference}</p>
+                              <p className="mt-1 text-[12px] text-ivory/40">
+                                Referencia: {payment.reference}
+                              </p>
                             ) : null}
                             {payment.notes ? (
-                              <p className="mt-1 text-xs text-white/50">Nota: {payment.notes}</p>
+                              <p className="mt-1 text-[12px] text-ivory/40">Nota: {payment.notes}</p>
                             ) : null}
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-5 text-sm text-white/65">Todavia no hay pagos cargados.</p>
+                      <p className="mt-5 text-[13px] text-ivory/45">Todavía no hay pagos cargados.</p>
                     )}
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="mt-6 text-sm text-white/65">
-              Todavia no hay una edicion asignada a tu cuenta. El equipo la puede cargar desde admin.
-            </p>
+            <div className="tile mt-6 p-6">
+              <p className="text-[14px] leading-relaxed text-ivory/55">
+                Todavía no hay una edición asignada a tu cuenta. El equipo la puede cargar desde admin.
+              </p>
+            </div>
           )}
         </section>
 
-        <section className="mt-8 grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <h2 className="text-lg font-semibold">Historial de estado</h2>
-            <p className="mt-2 text-sm text-white/65">Registro de avances cargado por el equipo.</p>
+        {/* Historial */}
+        <section className="mt-6 grid gap-6 md:grid-cols-2">
+          <div className="surface p-6 sm:p-7">
+            <SectionHead
+              eyebrow="Historial"
+              title="Cambios de estado"
+              subtitle="Registro de avances cargado por el equipo."
+            />
 
             {user.statusEvents.length ? (
-              <div className="mt-5 grid gap-3">
+              <ol className="mt-6 grid gap-3">
                 {user.statusEvents.map((event) => (
-                  <div key={event.id} className="rounded-2xl border border-white/10 bg-black/25 p-4">
-                    <p className="text-sm font-semibold text-white/90">
-                      {statusLabel(event.fromStatus)} {'->'} {statusLabel(event.toStatus)}
-                    </p>
-                    <p className="mt-1 text-xs text-white/55">
-                      {new Date(event.createdAt).toLocaleString()}
-                    </p>
-                  </div>
+                  <li key={event.id} className="tile flex items-start gap-3 p-4">
+                    <span
+                      aria-hidden="true"
+                      className="mt-1.5 h-2 w-2 flex-none rounded-full bg-celeste shadow-[0_0_12px_rgba(124,201,236,0.9)]"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-semibold text-ivory/90">
+                        {statusLabel(event.fromStatus)} → {statusLabel(event.toStatus)}
+                      </p>
+                      <p className="mt-1 text-[12px] text-ivory/45">
+                        {new Date(event.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </li>
                 ))}
-              </div>
+              </ol>
             ) : (
-              <p className="mt-5 text-sm text-white/65">Todavia no hay cambios registrados.</p>
+              <p className="mt-6 text-[14px] text-ivory/50">Todavía no hay cambios registrados.</p>
             )}
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <h2 className="text-lg font-semibold">Movimientos de puntos</h2>
-            <p className="mt-2 text-sm text-white/65">
-              Los puntos siguen siendo simbolicos y no representan dinero.
-            </p>
+          <div className="surface p-6 sm:p-7">
+            <SectionHead
+              eyebrow="Comunidad"
+              title="Movimientos de puntos"
+              subtitle="Los puntos son simbólicos y no representan dinero."
+            />
 
             {user.pointsTransactions.length ? (
-              <div className="mt-5 grid gap-3">
+              <div className="mt-6 grid gap-3">
                 {user.pointsTransactions.map((transaction) => (
-                  <div key={transaction.id} className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <div key={transaction.id} className="tile p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-white/90">+{transaction.points} pts</p>
-                      <p className="text-xs text-white/55">
+                      <p className="numeric text-[15px] font-semibold text-celeste">
+                        +{transaction.points} pts
+                      </p>
+                      <p className="text-[12px] text-ivory/45">
                         {new Date(transaction.createdAt).toLocaleDateString()}
                       </p>
                     </div>
-                    <p className="mt-1 text-xs text-white/60">Motivo: {transaction.reason}</p>
+                    <p className="mt-1.5 text-[12px] text-ivory/55">Motivo: {transaction.reason}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="mt-5 text-sm text-white/65">Sin movimientos todavia.</p>
+              <p className="mt-6 text-[14px] text-ivory/50">Sin movimientos todavía.</p>
             )}
           </div>
         </section>
 
-        <div className="mt-10 flex flex-col gap-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-          <Link className="text-white/70 hover:text-white hover:underline" href="/">
-            {'<-'} Volver a la landing
+        <footer className="mt-12 flex flex-col gap-4 border-t border-ivory/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <Link
+            className="text-[13px] text-ivory/50 transition hover:text-ivory"
+            href="/"
+          >
+            ← Volver a la landing
           </Link>
-          <div className="flex items-center gap-3 sm:hidden">
-            {isAdminRole(user.role) ? (
-              <Link
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/90 transition hover:bg-white/10"
-                href="/admin"
-              >
-                Admin
-              </Link>
-            ) : null}
-            <SignOutButton />
-          </div>
-        </div>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-ivory/25">
+            Metamorfosis · Panel del participante
+          </p>
+        </footer>
       </div>
     </main>
   );
