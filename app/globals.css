@@ -7,6 +7,16 @@ html, body {
   padding: 0;
 }
 
+/* Los halos decorativos (.aura) se posicionan con offsets negativos y se
+   salen a la derecha del viewport: eso agregaba scroll horizontal en toda
+   la pagina (y en celular recortaba el header).
+   Va `clip` y no `hidden` a proposito: `hidden` crea un contenedor de scroll
+   y rompe el `position: sticky` del header y de la columna de la Fase 1. */
+html,
+body {
+  overflow-x: clip;
+}
+
 html {
   scroll-behavior: smooth;
 }
