@@ -100,6 +100,18 @@ En `Project > Settings > Environment Variables` agrega:
 - `ADMIN_EMAILS` si aplica
 - `NEXT_PUBLIC_INSTAGRAM_USERNAME`
 
+## Inscripciones de la landing
+
+El formulario guarda en la tabla `public.signups` y el listado vive en
+`/admin > Inscriptos`. Si el formulario responde "No pudimos guardar tus datos",
+casi siempre es que esa tabla no existe todavia en la base: corre
+`supabase/signups.sql` (el mismo bloque que trae `schema.sql`, aislado para
+aplicarlo sobre una base ya creada) desde el SQL editor de Supabase, o con:
+
+```bash
+npx prisma db execute --url="$DATABASE_URL" --file="supabase/signups.sql"
+```
+
 Y si quieres igualar la landing local:
 
 - `NEXT_PUBLIC_VERTICAL_VIDEO_URL`
