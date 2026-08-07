@@ -13,6 +13,7 @@ import {
   listPayments,
   listPointsTransactionsByUserId,
   listReferralsByUserIds,
+  listSignups,
   listStatusEventsByUserId,
   listUserAchievements,
   listUserAchievementsByUserId,
@@ -214,6 +215,7 @@ export async function getAdminData() {
     gods,
     godAssignments,
     manualAchievements,
+    signups,
   ] = await Promise.all([
     listUsers(),
     listEditions(),
@@ -226,6 +228,9 @@ export async function getAdminData() {
     listGreekGods(),
     listUserGodAssignments(),
     listUserAchievements(),
+    // La tabla `signups` puede no existir todavia (falta correr supabase/schema.sql).
+    // No queremos que eso tire abajo todo el panel.
+    listSignups().catch((): Awaited<ReturnType<typeof listSignups>> => []),
   ]);
 
   const userById = new Map(users.map((user) => [user.id, user]));
@@ -329,5 +334,6 @@ export async function getAdminData() {
     newsPosts: hydratedNewsPosts,
     gods,
     godAssignments,
+    signups,
   };
 }

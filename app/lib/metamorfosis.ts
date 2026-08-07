@@ -19,12 +19,21 @@ export const ENROLLMENT_STATUS_OPTIONS = [
 ] as const;
 export const PAYMENT_STATUS_OPTIONS = ['PENDIENTE', 'CONFIRMADO', 'CANCELADO', 'DEVUELTO'] as const;
 export const PAYMENT_METHOD_OPTIONS = ['TRANSFERENCIA', 'EFECTIVO', 'MERCADO_PAGO', 'TARJETA', 'OTRO'] as const;
+export const SIGNUP_STATUS_OPTIONS = [
+  'NUEVO',
+  'CONTACTADO',
+  'EN_CONVERSACION',
+  'RESERVADO',
+  'INSCRIPTO',
+  'DESCARTADO',
+] as const;
 
 export type AppRole = 'USER' | 'ADMIN' | 'SUPERADMIN';
 export type UserStatus = (typeof USER_STATUS_OPTIONS)[number];
 export type EnrollmentStatus = (typeof ENROLLMENT_STATUS_OPTIONS)[number];
 export type PaymentStatus = (typeof PAYMENT_STATUS_OPTIONS)[number];
 export type PaymentMethod = (typeof PAYMENT_METHOD_OPTIONS)[number];
+export type SignupStatus = (typeof SIGNUP_STATUS_OPTIONS)[number];
 
 function normalizeEnumValue<T extends readonly string[]>(
   value: string | null | undefined,
@@ -71,6 +80,27 @@ export function normalizePaymentStatus(value: string | null | undefined): Paymen
 
 export function normalizePaymentMethod(value: string | null | undefined): PaymentMethod {
   return normalizeEnumValue(value, PAYMENT_METHOD_OPTIONS, 'TRANSFERENCIA');
+}
+
+export function normalizeSignupStatus(value: string | null | undefined): SignupStatus {
+  return normalizeEnumValue(value, SIGNUP_STATUS_OPTIONS, 'NUEVO');
+}
+
+export function signupStatusLabel(status: string | null | undefined) {
+  switch (normalizeSignupStatus(status)) {
+    case 'CONTACTADO':
+      return 'Contactado';
+    case 'EN_CONVERSACION':
+      return 'En conversacion';
+    case 'RESERVADO':
+      return 'Reservo lugar';
+    case 'INSCRIPTO':
+      return 'Inscripto';
+    case 'DESCARTADO':
+      return 'Descartado';
+    default:
+      return 'Nuevo';
+  }
 }
 
 export function statusLabel(status: string | null | undefined) {

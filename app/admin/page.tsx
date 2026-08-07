@@ -8,11 +8,14 @@ import {
   isAdminRole,
   isSuperadminRole,
   roleLabel,
+  signupStatusLabel,
   statusLabel,
   sumConfirmedPayments,
+  SIGNUP_STATUS_OPTIONS,
 } from '@/app/lib/metamorfosis';
 import { getAdminData } from '@/app/lib/supabase/views';
 import { ActionNotice } from './ActionNotice';
+import { DeleteSignupInline } from './DeleteSignupInline';
 import { FormSubmitButton } from './FormSubmitButton';
 import { GodFormModal } from './GodFormModal';
 import { PersonalTasksModal } from './PersonalTasksModal';
@@ -29,6 +32,7 @@ import {
   updateAdminEdition,
   updateAdminEditionPhase,
   updateNewsPostAction,
+  updateSignupAction,
   updateUserStatus,
   updateWeeklyTaskAction,
   upsertEnrollment,
@@ -44,7 +48,16 @@ type TreeNode = {
   children: TreeNode[];
 };
 
-type AdminTab = 'overview' | 'finance' | 'community' | 'aula' | 'news' | 'gods' | 'gifts' | 'settings';
+type AdminTab =
+  | 'overview'
+  | 'signups'
+  | 'finance'
+  | 'community'
+  | 'aula'
+  | 'news'
+  | 'gods'
+  | 'gifts'
+  | 'settings';
 
 function initials(name: string | null, email: string | null) {
   const base = (name ?? '').trim();
@@ -237,11 +250,22 @@ export default async function AdminPage({
   const maxDepth: number | null =
     levelParam === '1' ? 1 : levelParam === '2' ? 2 : levelParam === 'all' ? null : 2;
   const tabParam = (searchParams?.tab ?? 'overview').toString() as AdminTab;
-  const validTabs: AdminTab[] = ['overview', 'finance', 'community', 'aula', 'news', 'gods', 'gifts', 'settings'];
+  const validTabs: AdminTab[] = [
+    'overview',
+    'signups',
+    'finance',
+    'community',
+    'aula',
+    'news',
+    'gods',
+    'gifts',
+    'settings',
+  ];
   const activeTab: AdminTab = validTabs.includes(tabParam) ? tabParam : 'overview';
   const notice = (searchParams?.notice ?? '').toString().trim();
 
-  const { users, editions, giftInvitations, weeklyTasks, newsPosts, gods } = await getAdminData();
+  const { users, editions, giftInvitations, weeklyTasks, newsPosts, gods, signups } =
+    await getAdminData();
 
   const selectedEdition =
     editions.find((edition) => edition.slug === searchParams?.edition) ??
@@ -325,11 +349,18 @@ export default async function AdminPage({
     (count, enrollment) => count + enrollment.payments.filter((payment) => payment.status === 'CONFIRMADO').length,
     0
   );
+  const signupCounts = signups.reduce<Record<string, number>>((acc, signup) => {
+    const key = String(signup.status ?? 'NUEVO').toUpperCase();
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
   const editionSix = editions.find((edition) => edition.sequence === 6) ?? null;
   const editionSixGiftInvitations = giftInvitations.filter((invitation) => invitation.edition?.sequence === 6);
 
   const tabs: { id: AdminTab; label: string; help: string }[] = [
     { id: 'overview', label: 'Resumen', help: 'Vista ejecutiva por edicion y fase.' },
+    { id: 'signups', label: 'Inscriptos', help: 'Gente que dejo sus datos en la web.' },
     { id: 'finance', label: 'Finanzas', help: 'Operacion diaria de asignaciones y pagos.' },
     { id: 'community', label: 'Comunidad', help: 'Arbol, estados y referencias.' },
     { id: 'aula', label: 'Aula', help: 'Tareas semanales por fase y material de estudio.' },
@@ -660,6 +691,136 @@ export default async function AdminPage({
                 )}
               </SectionShell>
             </div>
+          </div>
+        ) : null}
+
+        {activeTab === 'signups' ? (
+          <div className="mt-8 grid gap-8">
+            <SectionShell
+              title="Inscriptos desde la web"
+              subtitle="Cada persona que completo el formulario de la landing (nombre, WhatsApp y red social). Marcales el estado a medida que los vas contactando."
+            >
+              <div className="grid gap-3 md:grid-cols-4">
+                <SummaryCard
+                  label="Total"
+                  value={signups.length}
+                  help="Formularios recibidos desde la web."
+                />
+                <SummaryCard
+                  label="Sin contactar"
+                  value={signupCounts.NUEVO ?? 0}
+                  help="Todavia nadie les escribio."
+                />
+                <SummaryCard
+                  label="En conversacion"
+                  value={(signupCounts.CONTACTADO ?? 0) + (signupCounts.EN_CONVERSACION ?? 0)}
+                  help="Ya hubo contacto pero no cerraron."
+                />
+                <SummaryCard
+                  label="Reservaron / Inscriptos"
+                  value={(signupCounts.RESERVADO ?? 0) + (signupCounts.INSCRIPTO ?? 0)}
+                  help="Confirmaron su lugar."
+                />
+              </div>
+
+              <div className="mt-6 grid gap-3">
+                {signups.length ? (
+                  signups.map((signup) => (
+                    <details
+                      key={signup.id}
+                      className="rounded-2xl border border-white/10 bg-black/20 p-4 open:border-emerald-400/30"
+                    >
+                      <summary className="cursor-pointer">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-white/90">{signup.fullName}</p>
+                            <p className="mt-1 truncate text-xs text-white/55">
+                              +{signup.phone}
+                              {signup.social ? ` - ${signup.social}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex flex-none items-center gap-3">
+                            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100">
+                              {signupStatusLabel(signup.status)}
+                            </span>
+                            <span className="text-xs text-white/55">
+                              {new Date(signup.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </summary>
+
+                      <div className="mt-4 grid gap-3 text-xs text-white/60">
+                        <p>
+                          Edicion: <span className="text-white/80">{signup.editionLabel ?? '-'}</span>
+                        </p>
+                        <p>
+                          Origen: <span className="text-white/80">{signup.source ?? '-'}</span> - Recibido:{' '}
+                          <span className="text-white/80">{new Date(signup.createdAt).toLocaleString()}</span>
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={`https://wa.me/${signup.phone}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
+                          >
+                            Escribir por WhatsApp
+                          </a>
+                          {signup.social ? (
+                            <span className="inline-flex h-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 text-[11px] text-white/70">
+                              {signup.social}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <form action={updateSignupAction} className="mt-4 grid gap-3 md:grid-cols-2">
+                        <input type="hidden" name="signupId" value={signup.id} />
+                        <label className="grid gap-1">
+                          <span className="text-xs text-white/55">Estado</span>
+                          <select
+                            name="status"
+                            defaultValue={signup.status}
+                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          >
+                            {SIGNUP_STATUS_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {signupStatusLabel(option)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-xs text-white/55">Notas internas</span>
+                          <input
+                            name="notes"
+                            defaultValue={signup.notes ?? ''}
+                            placeholder="Ej: pidio pagar en partes"
+                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
+                          />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                          <FormSubmitButton
+                            className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition hover:bg-emerald-400"
+                            pendingLabel="Guardando..."
+                          >
+                            Guardar
+                          </FormSubmitButton>
+                          <DeleteSignupInline signupId={signup.id} />
+                        </div>
+                      </form>
+                    </details>
+                  ))
+                ) : (
+                  <p className="text-sm text-white/70">
+                    Todavia no hay inscripciones desde la web. Si acabas de publicar los cambios, revisa que
+                    hayas corrido <span className="font-semibold text-white/85">supabase/schema.sql</span> para
+                    crear la tabla <span className="font-semibold text-white/85">signups</span>.
+                  </p>
+                )}
+              </div>
+            </SectionShell>
           </div>
         ) : null}
 

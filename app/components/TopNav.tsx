@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+
+import { ButterflyMark } from './ButterflyMark';
 
 export type NavItem = {
   id: string;
@@ -32,12 +35,18 @@ export function TopNav({ items }: { items: NavItem[] }) {
   const firstAnchor = items.find((i) => (i.type ?? 'anchor') === 'anchor');
   const [activeId, setActiveId] = useState(firstAnchor?.id ?? '');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const rafRef = useRef<number | null>(null);
+
+  useEffect(() => setMounted(true), []);
 
   const sectionIds = useMemo(
     () => items.filter((i) => (i.type ?? 'anchor') === 'anchor').map((i) => i.id),
     [items]
   );
+
+  const anchors = useMemo(() => items.filter((i) => (i.type ?? 'anchor') === 'anchor'), [items]);
+  const links = useMemo(() => items.filter((i) => (i.type ?? 'anchor') === 'link'), [items]);
 
   useEffect(() => {
     if (!sectionIds.length) return;
@@ -83,95 +92,178 @@ export function TopNav({ items }: { items: NavItem[] }) {
     };
   }, [sectionIds]);
 
+  // Bloquear el scroll del fondo y salir con Escape mientras el panel está abierto.
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false);
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mobileOpen]);
+
   const onAnchorClick = (item: NavItem) => {
     const targetId = item.scrollToId ?? item.id;
     setActiveId(item.id);
-    scrollToId(targetId);
     setMobileOpen(false);
-  };
-
-  const onLinkClick = () => {
-    setMobileOpen(false);
+    // Esperamos a que se cierre el panel para que el scroll calcule bien.
+    window.setTimeout(() => scrollToId(targetId), 220);
   };
 
   return (
     <nav className="mt-5 flex justify-center">
       <div className="w-full max-w-5xl">
-        {/* Mobile (cajón) */}
+        {/* ------------------------------------------------------- Mobile */}
         <div className="sm:hidden">
-          <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur">
+          <div className="flex items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-black/20 px-4 text-sm font-semibold tracking-wide text-white/80 outline-none transition hover:bg-black/30 hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+              onClick={() => setMobileOpen(true)}
+              className="group inline-flex h-11 items-center gap-2.5 rounded-full border border-ivory/15 pl-2.5 pr-5 text-[11px] font-bold uppercase tracking-[0.18em] text-ivory/75 outline-none transition duration-300 hover:border-celeste/50 hover:text-ivory"
               aria-expanded={mobileOpen}
-              aria-controls="topnav-mobile-drawer"
+              aria-controls="topnav-mobile-panel"
             >
-              {mobileOpen ? 'CERRAR' : 'MENÚ'}
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-celeste/12 text-celeste transition-transform duration-500 group-hover:scale-110">
+                <ButterflyMark className="h-4 w-4" strokeWidth={5} />
+              </span>
+              Menú
             </button>
 
-            {/* CTA (si existe) */}
-            {items
-              .filter((i) => (i.type ?? 'anchor') === 'link')
-              .slice(0, 1)
-              .map((item) => (
-                <Link
-                  key={item.id}
-                  href={item.href ?? '/dashboard'}
-                  onClick={onLinkClick}
-                  className={
-                    item.variant === 'inverted'
-                      ? 'nav-cta relative inline-flex h-10 items-center justify-center rounded-xl border border-emerald-300/35 bg-slate-950/70 px-4 text-sm font-semibold tracking-wide text-emerald-200 outline-none transition hover:bg-slate-950/90 hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-400/60'
-                      : 'inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold tracking-wide text-white/80 outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400/60'
-                  }
-                >
-                  <span className="relative z-10">{item.label}</span>
-                  {item.variant === 'inverted' ? (
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400/10 to-cyan-300/10"
-                    />
-                  ) : null}
-                </Link>
-              ))}
+            {links.slice(0, 1).map((item) => (
+              <Link
+                key={item.id}
+                href={item.href ?? '/dashboard'}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-celeste/40 px-5 text-[11px] font-bold uppercase tracking-[0.18em] text-celeste outline-none transition hover:bg-celeste/10"
+              >
+                {item.label}
+              </Link>
+            ))}
           </div>
-
-          {mobileOpen ? (
-            <div
-              id="topnav-mobile-drawer"
-              className="mt-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur"
-            >
-              <div className="grid gap-2">
-                {items
-                  .filter((i) => (i.type ?? 'anchor') === 'anchor')
-                  .map((item) => {
-                    const isActive = activeId === item.id;
-                    return (
-                      <a
-                        key={item.id}
-                        href={`#${item.id}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          onAnchorClick(item);
-                        }}
-                        className={
-                          isActive
-                            ? 'rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold tracking-wide text-white outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60'
-                            : 'rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold tracking-wide text-white/80 outline-none transition hover:bg-black/30 hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400/60'
-                        }
-                      >
-                        {item.label}
-                      </a>
-                    );
-                  })}
-              </div>
-            </div>
-          ) : null}
         </div>
 
-        {/* Desktop (menú normal) */}
-        <div className="hidden sm:flex justify-center">
-          <div className="relative flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 backdrop-blur">
+        {/* Panel a pantalla completa.
+            Va por portal a <body>: dentro del <header> (que tiene backdrop-blur)
+            un hijo `fixed` queda contenido en la caja del header y no tapa la
+            página. Fondo 100% sólido, sin alpha. */}
+        {mounted
+          ? createPortal(
+              <AnimatePresence>
+          {mobileOpen ? (
+            <motion.div
+              id="topnav-mobile-panel"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.28, ease: [0.25, 0.1, 0.25, 1] }}
+              style={{ backgroundColor: '#04070E' }}
+              className="fixed inset-0 z-[65] flex flex-col overflow-hidden sm:hidden"
+            >
+              {/* Mariposa de marca de agua */}
+              <motion.div
+                aria-hidden="true"
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+                className="pointer-events-none absolute inset-x-0 top-[22%] flex justify-center"
+              >
+                <ButterflyMark
+                  className="h-[24rem] w-[24rem] text-celeste/[0.07]"
+                  strokeWidth={1.2}
+                  filled
+                />
+              </motion.div>
+
+              <div
+                aria-hidden="true"
+                className="aura aura-celeste absolute left-1/2 top-1/3 h-[22rem] w-[22rem] -translate-x-1/2 opacity-60"
+              />
+
+              {/* Cabecera del panel */}
+              <div className="relative z-10 flex items-center justify-between px-6 pt-6">
+                <span className="text-[10px] font-bold uppercase tracking-[0.24em] text-ivory/35">
+                  Metamorfosis
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="Cerrar menú"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ivory/15 text-ivory/70 transition hover:border-celeste/50 hover:text-ivory"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Links */}
+              <div className="relative z-10 flex flex-1 flex-col justify-center px-6">
+                {anchors.map((item, i) => {
+                  const isActive = activeId === item.id;
+                  return (
+                    <motion.a
+                      key={item.id}
+                      href={`#${item.id}`}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.06 + i * 0.055, duration: 0.4, ease: 'easeOut' }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onAnchorClick(item);
+                      }}
+                      className="flex items-baseline gap-5 border-b border-ivory/[0.08] py-5"
+                    >
+                      <span className="numeric text-[11px] font-semibold text-celeste/70">
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <span
+                        className={`display text-[2rem] lowercase first-letter:uppercase transition-colors duration-300 ${
+                          isActive ? 'text-celeste' : 'text-ivory'
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                    </motion.a>
+                  );
+                })}
+              </div>
+
+              {/* Pie del panel */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.35 }}
+                className="relative z-10 px-6 pb-10"
+                style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom, 0px))' }}
+              >
+                {links.slice(0, 1).map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.href ?? '/dashboard'}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex h-14 items-center justify-center rounded-full border border-celeste/40 text-[12px] font-bold uppercase tracking-[0.18em] text-celeste transition hover:bg-celeste/10"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </motion.div>
+            </motion.div>
+          ) : null}
+              </AnimatePresence>,
+              document.body
+            )
+          : null}
+
+        {/* ------------------------------------------------------ Desktop */}
+        <div className="hidden justify-center sm:flex">
+          <div className="flex flex-wrap items-center justify-center gap-x-9 gap-y-2">
             {items.map((item) => {
               const isActive = activeId === item.id;
 
@@ -182,17 +274,11 @@ export function TopNav({ items }: { items: NavItem[] }) {
                     href={item.href ?? '/dashboard'}
                     className={
                       item.variant === 'inverted'
-                        ? 'nav-cta relative select-none rounded-xl border border-emerald-300/35 bg-slate-950/70 px-4 py-2 text-sm font-semibold tracking-wide text-emerald-200 outline-none transition hover:bg-slate-950/90 hover:text-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-400/60'
-                        : 'relative select-none rounded-xl px-4 py-2 text-sm font-semibold tracking-wide text-white/80 outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400/60'
+                        ? 'select-none rounded-full border border-celeste/40 px-5 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-celeste outline-none transition duration-300 hover:bg-celeste/10'
+                        : 'select-none text-[11px] font-bold uppercase tracking-[0.18em] text-ivory/60 outline-none transition hover:text-ivory'
                     }
                   >
-                    <span className="relative z-10">{item.label}</span>
-                    {item.variant === 'inverted' ? (
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400/10 to-cyan-300/10"
-                      />
-                    ) : null}
+                    {item.label}
                   </Link>
                 );
               }
@@ -205,30 +291,22 @@ export function TopNav({ items }: { items: NavItem[] }) {
                     e.preventDefault();
                     onAnchorClick(item);
                   }}
-                  className="relative select-none rounded-xl px-4 py-2 text-sm font-semibold tracking-wide text-white/80 outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                  className={
+                    'relative select-none py-2 text-[11px] font-bold uppercase tracking-[0.18em] outline-none transition duration-300 ' +
+                    (isActive ? 'text-ivory' : 'text-ivory/50 hover:text-ivory/85')
+                  }
                 >
+                  {item.label}
                   {isActive ? (
                     <motion.span
-                      layoutId="nav-pill"
-                      className="absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-400/90 to-cyan-300/90"
-                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                      layoutId="nav-underline"
+                      className="absolute -bottom-0.5 left-0 right-0 h-px bg-celeste"
+                      transition={{ type: 'spring', stiffness: 480, damping: 38 }}
                     />
                   ) : null}
-
-                  <span className={isActive ? 'relative z-10 text-slate-950' : 'relative z-10'}>
-                    {item.label}
-                  </span>
                 </a>
               );
             })}
-
-            <motion.div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 rounded-2xl"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-            />
           </div>
         </div>
       </div>

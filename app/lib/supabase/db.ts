@@ -144,6 +144,19 @@ export type DbNewsPost = {
   updated_at: string;
 };
 
+export type DbSignup = {
+  id: string;
+  full_name: string;
+  phone: string;
+  social: string | null;
+  edition_label: string | null;
+  source: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DbGreekGod = {
   id: string;
   slug: string;
@@ -340,6 +353,21 @@ export function mapNewsPost(post: DbNewsPost) {
     createdById: post.created_by_id,
     createdAt: post.created_at,
     updatedAt: post.updated_at,
+  };
+}
+
+export function mapSignup(signup: DbSignup) {
+  return {
+    id: signup.id,
+    fullName: signup.full_name,
+    phone: signup.phone,
+    social: signup.social,
+    editionLabel: signup.edition_label,
+    source: signup.source,
+    status: signup.status,
+    notes: signup.notes,
+    createdAt: signup.created_at,
+    updatedAt: signup.updated_at,
   };
 }
 
@@ -844,6 +872,41 @@ export async function updateNewsPost(id: string, values: Partial<DbNewsPost>) {
 export async function deleteNewsPostById(id: string) {
   const supabase = createAdminClient();
   const { error } = await supabase.from('news_posts').delete().eq('id', id);
+  assertNoError(error);
+}
+
+export async function listSignups() {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('signups')
+    .select('*')
+    .order('created_at', { ascending: false });
+  assertNoError(error);
+  return (data ?? []).map(mapSignup);
+}
+
+export async function insertSignup(values: Partial<DbSignup> & { full_name: string; phone: string }) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.from('signups').insert(values).select('*').single<DbSignup>();
+  assertNoError(error);
+  return mapSignup(data);
+}
+
+export async function updateSignup(id: string, values: Partial<DbSignup>) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('signups')
+    .update(values)
+    .eq('id', id)
+    .select('*')
+    .single<DbSignup>();
+  assertNoError(error);
+  return mapSignup(data);
+}
+
+export async function deleteSignupById(id: string) {
+  const supabase = createAdminClient();
+  const { error } = await supabase.from('signups').delete().eq('id', id);
   assertNoError(error);
 }
 

@@ -10,6 +10,7 @@ import {
   normalizeEnrollmentStatus,
   normalizePaymentMethod,
   normalizePaymentStatus,
+  normalizeSignupStatus,
   normalizeUserStatus,
   parseMoneyToCents,
   type UserStatus,
@@ -20,6 +21,7 @@ import {
   deleteGreekGodById,
   deleteNewsPostById,
   deletePaymentById,
+  deleteSignupById,
   deleteUserAchievementById,
   deleteUserGodAssignmentByUserId,
   deleteWeeklyTaskById,
@@ -45,6 +47,7 @@ import {
   updateEditionPhase,
   updateGreekGod,
   updateNewsPost,
+  updateSignup,
   updateUser,
   updateWeeklyTask,
   upsertUserGodAssignment,
@@ -601,6 +604,32 @@ export async function deleteNewsPostAction(formData: FormData) {
   await deleteNewsPostById(id);
   refreshAdminViews();
   redirect(buildAdminReturnPath({ tab: 'news', notice: 'Noticia eliminada.' }));
+}
+
+export async function updateSignupAction(formData: FormData) {
+  await requireAdminSession();
+
+  const id = String(formData.get('signupId') ?? '').trim();
+  if (!id) throw new Error('INVALID_SIGNUP');
+
+  const status = normalizeSignupStatus(String(formData.get('status') ?? ''));
+  const notes = String(formData.get('notes') ?? '').trim() || null;
+
+  await updateSignup(id, { status, notes });
+
+  refreshAdminViews();
+  redirect(buildAdminReturnPath({ tab: 'signups', notice: 'Inscripto actualizado.' }));
+}
+
+export async function deleteSignupAction(formData: FormData) {
+  await requireAdminSession();
+
+  const id = String(formData.get('signupId') ?? '').trim();
+  if (!id) throw new Error('INVALID_SIGNUP');
+
+  await deleteSignupById(id);
+  refreshAdminViews();
+  redirect(buildAdminReturnPath({ tab: 'signups', notice: 'Inscripto eliminado.' }));
 }
 
 export async function createGreekGod(formData: FormData) {
