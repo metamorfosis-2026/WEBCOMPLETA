@@ -23,7 +23,6 @@ export const CTA_LABEL_SHORT = `Inscribite · ${EDITION_NUMBER} Edición`;
 export const CTA_LINE_TOP = 'Inscribite en';
 export const CTA_LINE_BOTTOM = 'Metamorfosis 7ma Edición';
 
-export const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '5491164450430';
 export const INSTAGRAM_USERNAME = process.env.NEXT_PUBLIC_INSTAGRAM_USERNAME ?? 'metamorfosis.vip';
 export const INSTAGRAM_DM_URL = `https://ig.me/m/${INSTAGRAM_USERNAME}`;
 export const INSTAGRAM_PROFILE_URL = `https://www.instagram.com/${INSTAGRAM_USERNAME}/`;
@@ -32,10 +31,7 @@ export function onlyDigits(value: string) {
   return value.replace(/\D+/g, '');
 }
 
-export function buildWhatsAppUrl(message: string, phoneDigits = WHATSAPP_NUMBER) {
-  return `https://wa.me/${onlyDigits(phoneDigits)}?text=${encodeURIComponent(message)}`;
-}
-
+// Texto que la persona pega en el DM de Instagram despues de inscribirse.
 export function buildSignupMessage({
   fullName,
   phone,

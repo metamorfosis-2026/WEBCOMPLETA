@@ -24,7 +24,7 @@ SUPERADMIN_EMAILS="gestiones.metamorfosis@gmail.com"
 ADMIN_EMAILS=""
 OWNER_EMAIL=""
 
-NEXT_PUBLIC_WHATSAPP_NUMBER=""
+NEXT_PUBLIC_INSTAGRAM_USERNAME=""
 NEXT_PUBLIC_VERTICAL_VIDEO_URL=""
 NEXT_PUBLIC_SPLINE_SCENE_URL=""
 
@@ -98,7 +98,7 @@ En `Project > Settings > Environment Variables` agrega:
 - `SUPERADMIN_EMAILS`
 - `OWNER_EMAIL`
 - `ADMIN_EMAILS` si aplica
-- `NEXT_PUBLIC_WHATSAPP_NUMBER`
+- `NEXT_PUBLIC_INSTAGRAM_USERNAME`
 
 Y si quieres igualar la landing local:
 

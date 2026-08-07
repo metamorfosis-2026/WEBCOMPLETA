@@ -10,8 +10,8 @@ import {
   CTA_LINE_TOP,
   EDITION_DATE_LABEL,
   INSTAGRAM_DM_URL,
+  INSTAGRAM_USERNAME,
   buildSignupMessage,
-  buildWhatsAppUrl,
   onlyDigits,
 } from '@/app/lib/inscripcion';
 
@@ -41,13 +41,14 @@ export function SignupForm({
   const [honeypot, setHoneypot] = useState('');
   const [touched, setTouched] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
+  const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const phoneDigits = useMemo(() => onlyDigits(phone), [phone]);
   const isValid = fullName.trim().length >= 3 && phoneDigits.length >= 8;
 
-  const waUrl = useMemo(
-    () => buildWhatsAppUrl(buildSignupMessage({ fullName, phone: phoneDigits, social })),
+  const dmMessage = useMemo(
+    () => buildSignupMessage({ fullName, phone: phoneDigits, social }),
     [fullName, phoneDigits, social]
   );
 
@@ -65,16 +66,24 @@ export function SignupForm({
         source,
       });
 
-      // Guardado o no, la persona tiene que poder seguir por WhatsApp.
+      // No abrimos ninguna app sola: solo agradecemos y dejamos el DM a mano.
       setStatus(result.ok ? 'saved' : 'error');
       onDone?.();
-
-      try {
-        window.open(waUrl, '_blank', 'noopener,noreferrer');
-      } catch {
-        // Si el navegador lo bloquea, queda el boton visible en pantalla.
-      }
     });
+  };
+
+  /*
+    Instagram no acepta texto prellenado en el link del DM, así que copiamos
+    el mensaje al portapapeles antes de abrirlo: la persona solo pega y envía.
+  */
+  const handleInstagram = async () => {
+    try {
+      await navigator.clipboard.writeText(dmMessage);
+      setCopied(true);
+    } catch {
+      // Sin permiso de portapapeles igual abrimos el DM; abajo queda el texto.
+    }
+    window.open(INSTAGRAM_DM_URL, '_blank', 'noopener,noreferrer');
   };
 
   if (status !== 'idle') {
@@ -88,22 +97,27 @@ export function SignupForm({
         </p>
         <p className="mt-4 text-[16px] leading-relaxed text-ivory/65">
           {status === 'saved'
-            ? 'Ya quedaste en la lista de la 7ma edición. Terminá de reservar tu lugar por WhatsApp: ahí te pasamos las fechas exactas y las formas de pago.'
-            : 'No pudimos guardar tus datos automáticamente, pero podés escribirnos ahora mismo por WhatsApp con todo cargado.'}
+            ? 'Recibimos tus datos y ya quedaste en la lista de la 7ma edición. Te escribimos con las fechas exactas y las formas de pago. No hace falta que hagas nada más.'
+            : 'No pudimos guardar tus datos automáticamente. Mandanos el mensaje por Instagram y te reservamos el lugar igual.'}
         </p>
 
-        <a
-          href={waUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="group mt-8 flex items-center justify-between gap-4 rounded-2xl bg-celeste px-5 py-3 shadow-[0_16px_40px_-16px_rgba(124,201,236,0.85)] transition duration-300"
+        <p className="mt-6 text-[15px] leading-relaxed text-ivory/50">
+          {status === 'saved'
+            ? 'Si querés adelantar, mandanos estos mismos datos por DM a nuestro Instagram:'
+            : 'Mandanos tus datos por DM a nuestro Instagram:'}
+        </p>
+
+        <button
+          type="button"
+          onClick={handleInstagram}
+          className="group mt-4 flex w-full items-center justify-between gap-4 rounded-2xl bg-celeste px-5 py-3 shadow-[0_16px_40px_-16px_rgba(124,201,236,0.85)] transition duration-300 hover:shadow-[0_20px_50px_-14px_rgba(124,201,236,1)]"
         >
           <span className="flex min-w-0 flex-col items-start text-left">
             <span className="text-[10px] font-extrabold uppercase leading-none tracking-[0.2em] text-night/60">
-              Último paso
+              Instagram
             </span>
             <span className="display-sm mt-1.5 text-[1.15rem] font-bold leading-tight text-night">
-              Abrir WhatsApp
+              Enviar mis datos por DM
             </span>
           </span>
           <span
@@ -112,16 +126,17 @@ export function SignupForm({
           >
             →
           </span>
-        </a>
+        </button>
 
-        <a
-          href={INSTAGRAM_DM_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-5 block text-center text-[11px] uppercase tracking-[0.16em] text-ivory/40 underline-offset-4 transition hover:text-ivory/80 hover:underline"
-        >
-          Prefiero Instagram
-        </a>
+        {copied ? (
+          <p className="mt-4 text-[13px] leading-relaxed text-celeste">
+            Copiamos tu mensaje: pegalo en el chat de @{INSTAGRAM_USERNAME} y enviá.
+          </p>
+        ) : (
+          <p className="mt-4 text-[13px] leading-relaxed text-ivory/35">
+            Copiamos tu mensaje al portapapeles y abrimos el DM de @{INSTAGRAM_USERNAME}.
+          </p>
+        )}
       </div>
     );
   }
