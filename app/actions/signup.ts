@@ -20,9 +20,10 @@ export type SignupResult =
   | { ok: false; error: 'INVALID' | 'STORAGE' };
 
 /*
-  Guarda la inscripcion. Si Supabase falla (o falta la tabla), devolvemos
-  ok:false pero la UI igual deja continuar por WhatsApp: nunca bloqueamos
-  el contacto por un problema nuestro.
+  Guarda la inscripcion en Supabase (tabla signups, se ve en /admin).
+  Si Supabase falla (o falta la tabla), devolvemos ok:false pero la UI
+  igual ofrece el DM de Instagram: nunca bloqueamos el contacto por un
+  problema nuestro.
 */
 export async function submitSignup(input: SignupInput): Promise<SignupResult> {
   const parsed = signupSchema.safeParse(input);
