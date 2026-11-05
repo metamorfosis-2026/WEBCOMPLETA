@@ -8,18 +8,16 @@ import {
   isAdminRole,
   isSuperadminRole,
   roleLabel,
-  signupStatusLabel,
   statusLabel,
   sumConfirmedPayments,
-  SIGNUP_STATUS_OPTIONS,
 } from '@/app/lib/metamorfosis';
 import { EDITION_DATE_LABEL, EDITION_NAME, WAITLIST_MAX, WAITLIST_MIN } from '@/app/lib/inscripcion';
 import { getAdminData } from '@/app/lib/supabase/views';
 import { ActionNotice } from './ActionNotice';
-import { DeleteSignupInline } from './DeleteSignupInline';
 import { FormSubmitButton } from './FormSubmitButton';
 import { GodFormModal } from './GodFormModal';
 import { PersonalTasksModal } from './PersonalTasksModal';
+import { SignupsBoard } from './SignupsBoard';
 import { UserDetailModal } from './UserDetailModal';
 import {
   assignGodToUser,
@@ -33,7 +31,6 @@ import {
   updateAdminEdition,
   updateAdminEditionPhase,
   updateNewsPostAction,
-  updateSignupAction,
   updateUserStatus,
   updateWeeklyTaskAction,
   upsertEnrollment,
@@ -350,11 +347,6 @@ export default async function AdminPage({
     (count, enrollment) => count + enrollment.payments.filter((payment) => payment.status === 'CONFIRMADO').length,
     0
   );
-  const signupCounts = signups.reduce<Record<string, number>>((acc, signup) => {
-    const key = String(signup.status ?? 'NUEVO').toUpperCase();
-    acc[key] = (acc[key] ?? 0) + 1;
-    return acc;
-  }, {});
 
   // Lista de espera de la edicion vigente: misma regla que usa el formulario
   // (todas las anotadas a esta edicion, menos las descartadas).
@@ -363,10 +355,6 @@ export default async function AdminPage({
       (signup.editionLabel ?? '').startsWith(EDITION_NAME) &&
       String(signup.status ?? '').toUpperCase() !== 'DESCARTADO'
   ).length;
-  const waitlistMissing = Math.max(0, WAITLIST_MIN - waitlistCount);
-  const waitlistReserve = Math.max(0, waitlistCount - WAITLIST_MAX);
-  const waitlistPercent = Math.min(100, Math.round((waitlistCount / WAITLIST_MAX) * 100));
-  const waitlistMinPercent = Math.round((WAITLIST_MIN / WAITLIST_MAX) * 100);
 
   const editionSix = editions.find((edition) => edition.sequence === 6) ?? null;
   const editionSixGiftInvitations = giftInvitations.filter((invitation) => invitation.edition?.sequence === 6);
@@ -711,169 +699,16 @@ export default async function AdminPage({
           <div className="mt-8 grid gap-8">
             <SectionShell
               title="Inscriptos desde la web"
-              subtitle="Cada persona que completo el formulario de la landing (nombre, WhatsApp y red social). Marcales el estado a medida que los vas contactando."
+              subtitle="Cada persona que dejó sus datos en la landing. Escribiles por WhatsApp y marcales el estado a medida que avanzan."
             >
-              <div className="mb-6 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.06] p-5">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <p className="text-xs font-bold tracking-wide text-emerald-200/90">
-                      Lista de espera · {EDITION_NAME} · {EDITION_DATE_LABEL}
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-white">
-                      {waitlistCount} <span className="text-base text-white/50">/ {WAITLIST_MAX} lugares</span>
-                    </p>
-                  </div>
-                  <p className="text-sm text-white/70">
-                    {waitlistMissing > 0
-                      ? `Faltan ${waitlistMissing} para llegar al minimo de ${WAITLIST_MIN} y confirmar la fecha.`
-                      : waitlistReserve > 0
-                        ? `Cupo completo. ${waitlistReserve} en lista de reserva.`
-                        : `Minimo alcanzado: ya se puede confirmar el fin de semana.`}
-                  </p>
-                </div>
-                <div className="relative mt-4 h-3 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-emerald-400/80 transition-all"
-                    style={{ width: `${waitlistPercent}%` }}
-                  />
-                  <div
-                    aria-hidden="true"
-                    className="absolute inset-y-0 w-0.5 bg-white/70"
-                    style={{ left: `${waitlistMinPercent}%` }}
-                  />
-                </div>
-                <div className="relative mt-1 h-4 text-[11px] text-white/50">
-                  <span className="absolute -translate-x-1/2" style={{ left: `${waitlistMinPercent}%` }}>
-                    minimo {WAITLIST_MIN}
-                  </span>
-                  <span className="absolute right-0">maximo {WAITLIST_MAX}</span>
-                </div>
-                <p className="mt-3 text-[11px] text-white/45">
-                  Cuenta todas las inscripciones de la 7ma (tambien las anotadas cuando era sept/oct), sin las
-                  marcadas como DESCARTADO.
-                </p>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-4">
-                <SummaryCard
-                  label="Total"
-                  value={signups.length}
-                  help="Formularios recibidos desde la web."
-                />
-                <SummaryCard
-                  label="Sin contactar"
-                  value={signupCounts.NUEVO ?? 0}
-                  help="Todavia nadie les escribio."
-                />
-                <SummaryCard
-                  label="En conversacion"
-                  value={(signupCounts.CONTACTADO ?? 0) + (signupCounts.EN_CONVERSACION ?? 0)}
-                  help="Ya hubo contacto pero no cerraron."
-                />
-                <SummaryCard
-                  label="Reservaron / Inscriptos"
-                  value={(signupCounts.RESERVADO ?? 0) + (signupCounts.INSCRIPTO ?? 0)}
-                  help="Confirmaron su lugar."
-                />
-              </div>
-
-              <div className="mt-6 grid gap-3">
-                {signups.length ? (
-                  signups.map((signup) => (
-                    <details
-                      key={signup.id}
-                      className="rounded-2xl border border-white/10 bg-black/20 p-4 open:border-emerald-400/30"
-                    >
-                      <summary className="cursor-pointer">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-white/90">{signup.fullName}</p>
-                            <p className="mt-1 truncate text-xs text-white/55">
-                              +{signup.phone}
-                              {signup.social ? ` - ${signup.social}` : ''}
-                            </p>
-                          </div>
-                          <div className="flex flex-none items-center gap-3">
-                            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100">
-                              {signupStatusLabel(signup.status)}
-                            </span>
-                            <span className="text-xs text-white/55">
-                              {new Date(signup.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      </summary>
-
-                      <div className="mt-4 grid gap-3 text-xs text-white/60">
-                        <p>
-                          Edicion: <span className="text-white/80">{signup.editionLabel ?? '-'}</span>
-                        </p>
-                        <p>
-                          Origen: <span className="text-white/80">{signup.source ?? '-'}</span> - Recibido:{' '}
-                          <span className="text-white/80">{new Date(signup.createdAt).toLocaleString()}</span>
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <a
-                            href={`https://wa.me/${signup.phone}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex h-9 items-center justify-center rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/20"
-                          >
-                            Escribir por WhatsApp
-                          </a>
-                          {signup.social ? (
-                            <span className="inline-flex h-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 text-[11px] text-white/70">
-                              {signup.social}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <form action={updateSignupAction} className="mt-4 grid gap-3 md:grid-cols-2">
-                        <input type="hidden" name="signupId" value={signup.id} />
-                        <label className="grid gap-1">
-                          <span className="text-xs text-white/55">Estado</span>
-                          <select
-                            name="status"
-                            defaultValue={signup.status}
-                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                          >
-                            {SIGNUP_STATUS_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {signupStatusLabel(option)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="grid gap-1">
-                          <span className="text-xs text-white/55">Notas internas</span>
-                          <input
-                            name="notes"
-                            defaultValue={signup.notes ?? ''}
-                            placeholder="Ej: pidio pagar en partes"
-                            className="h-10 rounded-xl border border-white/10 bg-slate-950/70 px-3 text-sm text-white/90 outline-none"
-                          />
-                        </label>
-                        <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-                          <FormSubmitButton
-                            className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-black transition hover:bg-emerald-400"
-                            pendingLabel="Guardando..."
-                          >
-                            Guardar
-                          </FormSubmitButton>
-                          <DeleteSignupInline signupId={signup.id} />
-                        </div>
-                      </form>
-                    </details>
-                  ))
-                ) : (
-                  <p className="text-sm text-white/70">
-                    Todavia no hay inscripciones desde la web. Si acabas de publicar los cambios, revisa que
-                    hayas corrido <span className="font-semibold text-white/85">supabase/schema.sql</span> para
-                    crear la tabla <span className="font-semibold text-white/85">signups</span>.
-                  </p>
-                )}
-              </div>
+              <SignupsBoard
+                signups={signups}
+                editionName={EDITION_NAME}
+                editionDateLabel={EDITION_DATE_LABEL}
+                waitlistCount={waitlistCount}
+                min={WAITLIST_MIN}
+                max={WAITLIST_MAX}
+              />
             </SectionShell>
           </div>
         ) : null}
