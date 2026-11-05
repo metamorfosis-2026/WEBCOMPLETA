@@ -13,6 +13,7 @@ import {
   sumConfirmedPayments,
   SIGNUP_STATUS_OPTIONS,
 } from '@/app/lib/metamorfosis';
+import { EDITION_DATE_LABEL, EDITION_NAME, WAITLIST_MAX, WAITLIST_MIN } from '@/app/lib/inscripcion';
 import { getAdminData } from '@/app/lib/supabase/views';
 import { ActionNotice } from './ActionNotice';
 import { DeleteSignupInline } from './DeleteSignupInline';
@@ -354,6 +355,18 @@ export default async function AdminPage({
     acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
+
+  // Lista de espera de la edicion vigente: misma regla que usa el formulario
+  // (todas las anotadas a esta edicion, menos las descartadas).
+  const waitlistCount = signups.filter(
+    (signup) =>
+      (signup.editionLabel ?? '').startsWith(EDITION_NAME) &&
+      String(signup.status ?? '').toUpperCase() !== 'DESCARTADO'
+  ).length;
+  const waitlistMissing = Math.max(0, WAITLIST_MIN - waitlistCount);
+  const waitlistReserve = Math.max(0, waitlistCount - WAITLIST_MAX);
+  const waitlistPercent = Math.min(100, Math.round((waitlistCount / WAITLIST_MAX) * 100));
+  const waitlistMinPercent = Math.round((WAITLIST_MIN / WAITLIST_MAX) * 100);
 
   const editionSix = editions.find((edition) => edition.sequence === 6) ?? null;
   const editionSixGiftInvitations = giftInvitations.filter((invitation) => invitation.edition?.sequence === 6);
@@ -700,6 +713,47 @@ export default async function AdminPage({
               title="Inscriptos desde la web"
               subtitle="Cada persona que completo el formulario de la landing (nombre, WhatsApp y red social). Marcales el estado a medida que los vas contactando."
             >
+              <div className="mb-6 rounded-2xl border border-emerald-400/25 bg-emerald-400/[0.06] p-5">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold tracking-wide text-emerald-200/90">
+                      Lista de espera · {EDITION_NAME} · {EDITION_DATE_LABEL}
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-white">
+                      {waitlistCount} <span className="text-base text-white/50">/ {WAITLIST_MAX} lugares</span>
+                    </p>
+                  </div>
+                  <p className="text-sm text-white/70">
+                    {waitlistMissing > 0
+                      ? `Faltan ${waitlistMissing} para llegar al minimo de ${WAITLIST_MIN} y confirmar la fecha.`
+                      : waitlistReserve > 0
+                        ? `Cupo completo. ${waitlistReserve} en lista de reserva.`
+                        : `Minimo alcanzado: ya se puede confirmar el fin de semana.`}
+                  </p>
+                </div>
+                <div className="relative mt-4 h-3 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-emerald-400/80 transition-all"
+                    style={{ width: `${waitlistPercent}%` }}
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-y-0 w-0.5 bg-white/70"
+                    style={{ left: `${waitlistMinPercent}%` }}
+                  />
+                </div>
+                <div className="relative mt-1 h-4 text-[11px] text-white/50">
+                  <span className="absolute -translate-x-1/2" style={{ left: `${waitlistMinPercent}%` }}>
+                    minimo {WAITLIST_MIN}
+                  </span>
+                  <span className="absolute right-0">maximo {WAITLIST_MAX}</span>
+                </div>
+                <p className="mt-3 text-[11px] text-white/45">
+                  Cuenta todas las inscripciones de la 7ma (tambien las anotadas cuando era sept/oct), sin las
+                  marcadas como DESCARTADO.
+                </p>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-4">
                 <SummaryCard
                   label="Total"

@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { EDITION_LABEL, onlyDigits } from '@/app/lib/inscripcion';
-import { insertSignup } from '@/app/lib/supabase/db';
+import { EDITION_LABEL, EDITION_NAME, WAITLIST_MAX, onlyDigits } from '@/app/lib/inscripcion';
+import { countActiveSignups, insertSignup } from '@/app/lib/supabase/db';
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(3).max(120),
@@ -16,7 +16,7 @@ const signupSchema = z.object({
 export type SignupInput = z.infer<typeof signupSchema>;
 
 export type SignupResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; reserve: boolean }
   | { ok: false; error: 'INVALID' | 'STORAGE' };
 
 /*
@@ -43,8 +43,17 @@ export async function submitSignup(input: SignupInput): Promise<SignupResult> {
       status: 'NUEVO',
     });
 
+    // Pasado el maximo seguimos guardando, pero como lista de reserva.
+    let reserve = false;
+    try {
+      reserve = (await countActiveSignups(EDITION_NAME)) > WAITLIST_MAX;
+    } catch {
+      // Si falla el conteo, la inscripcion ya quedo guardada igual.
+    }
+
     revalidatePath('/admin');
-    return { ok: true, id: signup.id };
+    revalidatePath('/api/waitlist');
+    return { ok: true, id: signup.id, reserve };
   } catch {
     return { ok: false, error: 'STORAGE' };
   }

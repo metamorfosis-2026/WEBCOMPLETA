@@ -892,6 +892,19 @@ export async function insertSignup(values: Partial<DbSignup> & { full_name: stri
   return mapSignup(data);
 }
 
+// Cuenta las inscripciones vigentes de una edicion (todas las que empiezan con
+// ese nombre, sin importar la fecha que tenian cuando se anotaron).
+export async function countActiveSignups(editionName: string) {
+  const supabase = createAdminClient();
+  const { count, error } = await supabase
+    .from('signups')
+    .select('id', { count: 'exact', head: true })
+    .like('edition_label', `${editionName}%`)
+    .neq('status', 'DESCARTADO');
+  assertNoError(error);
+  return count ?? 0;
+}
+
 export async function updateSignup(id: string, values: Partial<DbSignup>) {
   const supabase = createAdminClient();
   const { data, error } = await supabase

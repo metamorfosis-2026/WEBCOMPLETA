@@ -5,9 +5,20 @@
 
 export const EDITION_NUMBER = '7ma';
 export const EDITION_NAME = 'METAMORFOSIS 7ma Edición';
-export const EDITION_DATE_LABEL = 'Septiembre / Octubre 2026';
-export const EDITION_DATE_SHORT = 'SEPT / OCT 2026';
+export const EDITION_DATE_LABEL = 'Noviembre 2026';
+export const EDITION_DATE_SHORT = 'NOV 2026';
 export const EDITION_LABEL = `${EDITION_NAME} · ${EDITION_DATE_LABEL}`;
+
+/*
+  Lista de espera: el taller es muy a medida, asi que el fin de semana de
+  noviembre se confirma recien cuando hay un minimo de inscriptos. Las
+  personas que se anotan despues del maximo quedan como reserva.
+*/
+export const WAITLIST_MIN = 25;
+export const WAITLIST_MAX = 50;
+// Desde cuantos anotados mostramos el numero en la web publica. Por debajo
+// de esto el contador juega en contra ("1 de 50" parece que nadie va).
+export const WAITLIST_PUBLIC_FROM = 10;
 export const EDITION_PLACE = 'Zona Oeste';
 
 export const FASE1_PRICE_LABEL = '$120.000';
@@ -42,11 +53,11 @@ export function buildSignupMessage({
   social?: string;
 }) {
   return [
-    `Hola! Quiero inscribirme en ${EDITION_NAME} (Fase 1).`,
+    `Hola! Me sumé a la lista de ${EDITION_NAME} (Fase 1, ${EDITION_DATE_LABEL}).`,
     fullName.trim() ? `Nombre: ${fullName.trim()}` : null,
     onlyDigits(phone) ? `WhatsApp: +${onlyDigits(phone)}` : null,
     social?.trim() ? `Red social: ${social.trim()}` : null,
-    '¿Me pasás las fechas exactas y cómo reservo mi lugar?',
+    '¿Me avisan cuando confirmen el fin de semana y cómo reservo mi lugar?',
   ]
     .filter(Boolean)
     .join('\n');

@@ -9,13 +9,16 @@ import {
   CTA_LINE_BOTTOM,
   CTA_LINE_TOP,
   EDITION_DATE_LABEL,
+  WAITLIST_MAX,
+  WAITLIST_MIN,
   INSTAGRAM_DM_URL,
   INSTAGRAM_USERNAME,
   buildSignupMessage,
   onlyDigits,
 } from '@/app/lib/inscripcion';
+import { WaitlistProgress } from './WaitlistProgress';
 
-type Status = 'idle' | 'saved' | 'error';
+type Status = 'idle' | 'saved' | 'reserve' | 'error';
 
 /*
   Campos "sólidos": en celular una línea fina no se lee como campo.
@@ -67,7 +70,7 @@ export function SignupForm({
       });
 
       // No abrimos ninguna app sola: solo agradecemos y dejamos el DM a mano.
-      setStatus(result.ok ? 'saved' : 'error');
+      setStatus(result.ok ? (result.reserve ? 'reserve' : 'saved') : 'error');
       onDone?.();
     });
   };
@@ -97,12 +100,14 @@ export function SignupForm({
         </p>
         <p className="mt-4 text-[16px] leading-relaxed text-ivory/65">
           {status === 'saved'
-            ? 'Recibimos tus datos y ya quedaste en la lista de la 7ma edición. Te escribimos con las fechas exactas y las formas de pago. No hace falta que hagas nada más.'
-            : 'No pudimos guardar tus datos automáticamente. Mandanos el mensaje por Instagram y te reservamos el lugar igual.'}
+            ? `Ya estás en la lista de la 7ma edición. Cuando lleguemos a ${WAITLIST_MIN} inscriptos confirmamos el fin de semana de noviembre y te escribimos por WhatsApp con la fecha, el valor y cómo reservar. No hace falta que hagas nada más.`
+            : status === 'reserve'
+              ? `Ya se completaron los ${WAITLIST_MAX} lugares de esta edición, así que quedaste en la lista de reserva. Si se libera un lugar o abrimos otro grupo, te escribimos por WhatsApp.`
+              : 'No pudimos guardar tus datos automáticamente. Mandanos el mensaje por Instagram y te anotamos en la lista igual.'}
         </p>
 
         <p className="mt-6 text-[15px] leading-relaxed text-ivory/50">
-          {status === 'saved'
+          {status !== 'error'
             ? 'Si querés adelantar, mandanos estos mismos datos por DM a nuestro Instagram:'
             : 'Mandanos tus datos por DM a nuestro Instagram:'}
         </p>
@@ -147,16 +152,20 @@ export function SignupForm({
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-celeste">Inscripción</p>
           <h3 className="display mt-4 text-[1.9rem] leading-tight sm:text-[2.25rem]">
-            Reservá tu lugar en la Fase 1
+            Sumate a la lista de la Fase 1
           </h3>
           <p className="mt-4 max-w-prose text-[16px] leading-relaxed text-ivory/65">
-            Dejanos tu nombre y tu WhatsApp. Te escribimos con las fechas exactas de{' '}
-            {EDITION_DATE_LABEL.toLowerCase()}, el valor y cómo reservar. Sin compromiso.
+            Es un taller muy a medida: confirmamos el fin de semana de{' '}
+            {EDITION_DATE_LABEL.toLowerCase()} cuando se completen {WAITLIST_MIN} lugares (máximo{' '}
+            {WAITLIST_MAX}). Dejanos tu nombre y tu WhatsApp y te avisamos primero la fecha, el valor
+            y cómo reservar. Sin compromiso.
           </p>
         </div>
       ) : null}
 
-      <div className={`grid gap-4 ${compact ? '' : 'mt-9'}`}>
+      <WaitlistProgress className={compact ? '' : 'mt-7'} />
+
+      <div className={`grid gap-4 ${compact ? 'mt-6' : 'mt-7'}`}>
         <label className="block">
           <span className={labelClass}>Tu nombre</span>
           <input
@@ -255,7 +264,7 @@ export function SignupForm({
       </button>
 
       <p className="mt-5 text-center text-[11px] uppercase tracking-[0.14em] text-ivory/35">
-        Cupos reducidos · No hacemos spam
+        Hasta {WAITLIST_MAX} lugares · No hacemos spam
       </p>
     </form>
   );
@@ -325,9 +334,9 @@ export function SignupModal({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-celeste">
-              Fase 1 · 7ma edición
+              Fase 1 · 7ma edición · {EDITION_DATE_LABEL}
             </p>
-            <p className="display mt-2 text-[1.6rem] leading-tight">Reservá tu lugar</p>
+            <p className="display mt-2 text-[1.6rem] leading-tight">Sumate a la lista</p>
           </div>
           <button
             type="button"

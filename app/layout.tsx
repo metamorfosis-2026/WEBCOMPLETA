@@ -22,9 +22,9 @@ const sans = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'Metamorfosis — 7ma Edición (Sept/Oct 2026)',
+  title: 'Metamorfosis — 7ma Edición (Noviembre 2026)',
   description:
-    'Taller de Inteligencia Emocional en Zona Oeste. Fase 1: un fin de semana intensivo para entender tu historia y transformarla. Cupos limitados — inscribite por WhatsApp.',
+    'Taller de Inteligencia Emocional en Zona Oeste. Fase 1: un fin de semana intensivo para entender tu historia y transformarla. Hasta 50 lugares — sumate a la lista.',
   icons: {
     icon: 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/favicon.ico',
     shortcut: 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/favicon.ico',

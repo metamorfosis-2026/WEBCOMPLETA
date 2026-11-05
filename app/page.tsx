@@ -34,6 +34,8 @@ import {
   FASE1_PRICE_TRANSFER_LABEL,
   FASE1_RESERVE_LABEL,
   FASE1_SCHEDULE,
+  WAITLIST_MAX,
+  WAITLIST_MIN,
   FASE1_TRANSFER_DISCOUNT_LABEL,
 } from './lib/inscripcion';
 
@@ -396,7 +398,7 @@ function PageContent() {
   const faqItems = [
     {
       question: '¿Cuándo es la 7ma edición?',
-      answer: `La Fase 1 arranca entre fines de septiembre y principios de octubre de 2026, en ${EDITION_PLACE}. Estamos cerrando el fin de semana exacto: escribinos y te confirmamos la fecha junto con la disponibilidad de cupos.`,
+      answer: `La Fase 1 es un fin de semana de noviembre de 2026 (${FASE1_SCHEDULE.toLowerCase()}), en ${EDITION_PLACE}. Como es un taller muy a medida, confirmamos el fin de semana exacto cuando se completen ${WAITLIST_MIN} lugares. Sumate a la lista y te avisamos primero.`,
     },
     {
       question: '¿Cuánto sale la Fase 1?',
@@ -424,7 +426,7 @@ function PageContent() {
     {
       question: '¿Hay cupos?',
       answer:
-        'Sí. Para cuidar la calidad del proceso y el acompañamiento, los grupos son reducidos. Pedí info y te contamos disponibilidad.',
+        `Sí. El grupo es de hasta ${WAITLIST_MAX} personas y necesitamos un mínimo de ${WAITLIST_MIN} para confirmar la fecha. Anotarte en la lista no tiene compromiso: cuando confirmamos el fin de semana te escribimos para reservar. Si ya se completaron los lugares, quedás en la lista de reserva.`,
     },
     {
       question: '¿Puedo participar si nunca hice un taller así?',
@@ -801,7 +803,7 @@ function PageContent() {
               {[
                 ['Cuándo', FASE1_SCHEDULE, 'ambos días'],
                 ['Dónde', 'Presencial', EDITION_PLACE],
-                ['Fecha', EDITION_DATE_LABEL, 'fin de semana exacto por WhatsApp'],
+                ['Fecha', EDITION_DATE_LABEL, `se confirma al llegar a ${WAITLIST_MIN} inscriptos`],
               ].map(([term, main, detail]) => (
                 <div key={term} className="px-7 py-7 sm:px-8 sm:py-9">
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-celeste">{term}</p>
