@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { hasSupabaseEnv } from './config';
 
+const SESSION_REFRESH_TIMEOUT_MS = 3000;
+
 export async function updateSession(request: NextRequest) {
   if (!hasSupabaseEnv()) {
     return NextResponse.next({ request });
@@ -27,7 +29,19 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  await supabase.auth.getClaims();
+  // Si Supabase no responde (proyecto pausado, caida, DNS), no bloqueamos la
+  // pagina: el middleware de Vercel tiene un limite de tiempo y la web entera
+  // devolveria 504 MIDDLEWARE_INVOCATION_TIMEOUT.
+  try {
+    await Promise.race([
+      supabase.auth.getClaims(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('supabase getClaims timeout')), SESSION_REFRESH_TIMEOUT_MS)
+      ),
+    ]);
+  } catch (error) {
+    console.error('[middleware] no se pudo refrescar la sesion de Supabase:', error);
+  }
 
   return response;
 }
