@@ -10,6 +10,7 @@
     "clean:hard": "powershell -NoProfile -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Milliseconds 300; node scripts/clean-next.js\""
   },
   "dependencies": {
+    "@splinetool/viewer": "^1.12.51",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.0",
     "framer-motion": "^11.0.0",

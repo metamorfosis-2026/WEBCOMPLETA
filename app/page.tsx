@@ -13,8 +13,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Reveal } from './components/Reveal';
 import { SignupForm, SignupModal } from './components/SignupForm';
 import { StickyInscripcionBar } from './components/StickyInscripcionBar';
@@ -45,37 +44,19 @@ function envFlag(value: string | undefined, fallback = false) {
   return ['1', 'true', 'yes', 'y', 'on'].includes(normalized);
 }
 
-function FadeInAutoplayVideo({
+function AutoplayVideo({
   src,
+  poster,
   className,
 }: {
   src: string;
+  poster: string;
   className?: string;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const didAutoPlayRef = useRef(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
-    if (!mq) return;
-
-    const update = () => setReduceMotion(Boolean(mq.matches));
-    update();
-
-    if (typeof mq.addEventListener === 'function') {
-      mq.addEventListener('change', update);
-      return () => mq.removeEventListener('change', update);
-    }
-
-    // Safari fallback
-    // eslint-disable-next-line deprecation/deprecation
-    mq.addListener(update);
-    // eslint-disable-next-line deprecation/deprecation
-    return () => mq.removeListener(update);
-  }, []);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -110,13 +91,13 @@ function FadeInAutoplayVideo({
     return () => observer.disconnect();
   }, [isLoaded]);
 
-  // Safety: if browser never fires the load events, don't keep it invisible.
+  // Por si el navegador nunca dispara los eventos de carga: igual intentamos
+  // darle play cuando entra entero en pantalla.
   useEffect(() => {
-    if (reduceMotion) return;
     if (isLoaded) return;
     const t = window.setTimeout(() => setIsLoaded(true), 900);
     return () => window.clearTimeout(t);
-  }, [reduceMotion, isLoaded]);
+  }, [isLoaded]);
 
   const handleEnableSound = () => {
     const el = videoRef.current;
@@ -145,18 +126,18 @@ function FadeInAutoplayVideo({
 
   return (
     <div className="relative h-full w-full">
+      {/* Visible desde el HTML del servidor, con poster: antes arrancaba con
+          opacity 0 y se veía un rectángulo negro hasta que cargaba el JS. */}
       <video
         ref={videoRef}
-        className={`${className ?? ''}${reduceMotion ? '' : ' transition-opacity duration-500 ease-out'}`}
-        style={{
-          opacity: reduceMotion ? 1 : isLoaded ? 1 : 0,
-        }}
+        className={className}
         src={src}
+        poster={poster}
         controls
         autoPlay
         muted={isMuted}
         playsInline
-        preload="auto"
+        preload="metadata"
         onLoadedMetadata={() => setIsLoaded(true)}
         onCanPlay={() => setIsLoaded(true)}
         onVolumeChange={(e) => {
@@ -191,15 +172,21 @@ function FadeInAutoplayVideo({
   );
 }
 
-const LOGO_URL = 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/LOGO%20HORIZONTAL.png';
-const WORDMARK_URL =
-  'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/LOGO%20METAMORFOSIS%20LETRA%20SOLA.png';
-const PORTRAIT_URL = 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/paraweb.jpg';
+// Imágenes servidas por Vercel desde /public, no desde r2.dev: Cloudflare
+// limita el acceso por r2.dev (devuelve 429 con mucho tráfico) y no lo
+// recomienda para producción. Los logos están achicados (los PNG originales
+// pesaban 12 MB y 5 MB).
+const LOGO_URL = '/marca/logo-horizontal.png';
+const WORDMARK_URL = '/marca/wordmark.png';
+const PORTRAIT_URL = '/daiana.jpg';
 
 // Fijo a propósito: antes salía de NEXT_PUBLIC_VERTICAL_VIDEO_URL y el valor
 // viejo del .env/Vercel pisaba el video nuevo del hero.
+// Sigue en r2.dev (31 MB): para producción conviene conectar un dominio propio
+// al bucket (ej. media.metamorfosis.vip) y cambiar esta URL.
 const VIDEO_URL =
   'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/videos/meta%20conocerte.mp4';
+const VIDEO_POSTER_URL = '/video-poster.jpg';
 
 const SPLINE_SCENE_URL =
   process.env.NEXT_PUBLIC_SPLINE_SCENE_URL ??
@@ -208,7 +195,7 @@ const SPLINE_SCENE_URL =
 const TESTIMONIALS_HIGHLIGHT_URL =
   'https://www.instagram.com/stories/highlights/18092573276053424/';
 
-const TESTIMONIALS_BASE_URL = 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/testi';
+const TESTIMONIALS_BASE_URL = '/testimonios';
 
 function scrollToSection(id: string) {
   const el = document.getElementById(id);
@@ -326,11 +313,21 @@ function MetaLabel({ children }: { children: React.ReactNode }) {
 
 /* ------------------------------------------------------------------- página */
 
-function PageContent() {
-  const searchParams = useSearchParams();
-  const isPreview = searchParams?.get('preview') === '1';
-  const isEmbed = searchParams?.get('embed') === '1';
+export default function Page() {
+  // ?preview=1 y ?embed=1 son solo para diseñar. Se leen después de montar y
+  // no con useSearchParams(): ese hook sin <Suspense> hacía que Next mandara
+  // la página vacía (BAILOUT_TO_CLIENT_SIDE_RENDERING) y todo se armaba en el
+  // navegador. Mientras cargaba el JS se veía negro, y si fallaba (navegador
+  // interno de Instagram/TikTok, celulares viejos) quedaba negro para siempre.
+  const [isPreview, setIsPreview] = useState(false);
+  const [isEmbed, setIsEmbed] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setIsPreview(params.get('preview') === '1');
+    setIsEmbed(params.get('embed') === '1');
+  }, []);
 
   const isVerticalMp4 = /\.mp4($|\?)/i.test(VIDEO_URL);
   const enableButterflyOverlay = envFlag(process.env.NEXT_PUBLIC_ENABLE_BUTTERFLY_OVERLAY, false);
@@ -447,7 +444,7 @@ function PageContent() {
 
   // Los testimonios nuevos (7ma edición) van primero; después los históricos.
   const testimonialImageUrls = [
-    ...Array.from({ length: 17 }, (_, i) => `${TESTIMONIALS_BASE_URL}/nueva1%20(${i + 1}).jpeg`),
+    ...Array.from({ length: 17 }, (_, i) => `${TESTIMONIALS_BASE_URL}/nueva-${i + 1}.jpeg`),
     ...Array.from({ length: 8 }, (_, i) => `${TESTIMONIALS_BASE_URL}/${i + 1}.jpg`),
   ];
 
@@ -538,7 +535,11 @@ function PageContent() {
                   <div className="relative overflow-hidden rounded-[24px] border border-ivory/12 bg-black/40 shadow-[0_50px_100px_-45px_rgba(0,0,0,0.95),0_0_70px_-40px_rgba(124,201,236,0.6)]">
                     <div className="aspect-[9/16]">
                       {isVerticalMp4 ? (
-                        <FadeInAutoplayVideo className="h-full w-full object-cover" src={VIDEO_URL} />
+                        <AutoplayVideo
+                          className="h-full w-full object-cover"
+                          src={VIDEO_URL}
+                          poster={VIDEO_POSTER_URL}
+                        />
                       ) : (
                         <iframe
                           className="h-full w-full"
@@ -1039,13 +1040,5 @@ function PageContent() {
       <StickyInscripcionBar onOpen={openSignup} />
       <SignupModal open={signupOpen} onClose={() => setSignupOpen(false)} />
     </main>
-  );
-}
-
-export default function Page() {
-  return (
-    <Suspense>
-      <PageContent />
-    </Suspense>
   );
 }

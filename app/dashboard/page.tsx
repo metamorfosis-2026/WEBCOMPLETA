@@ -22,7 +22,7 @@ import SignOutButton from './ui/SignOutButton';
 import { CopyLinkButton } from './ui/CopyLinkButton';
 import { ReferralTree } from './ui/ReferralTree';
 
-const LOGO_URL = 'https://pub-a6844436cdf343eca77a9769bb10e73e.r2.dev/LOGO%20HORIZONTAL.png';
+const LOGO_URL = '/marca/logo-horizontal.png';
 
 function initials(name?: string | null, email?: string | null) {
   const base = (name ?? '').trim();
