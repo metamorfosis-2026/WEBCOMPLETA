@@ -154,6 +154,7 @@ El WhatsApp lo atiende un asistente automático (`app/lib/whatsapp-bot.ts`). Su 
 Datos vigentes de la 7ma edición (actualizan el valor de la sección 4):
 - Sábado 28 y domingo 29 de noviembre, de 11 a 17 hs, en Zona Oeste. La dirección exacta se envía al confirmar.
 - Pago único de $72.000, o 2 pagos de $60.000 ($120.000 en total). El primero reserva el lugar y el segundo se paga antes del sábado 28. Pagando todo junto se ahorra $48.000.
+- Precios vigentes desde el 7/11/2026 (antes el plan en 2 pagos era de 2 × $50.000). Si en una charla se dijo el precio anterior, el asistente lo aclara y usa siempre los vigentes.
 - Cupo de 50 personas.
 
 ### Primer mensaje

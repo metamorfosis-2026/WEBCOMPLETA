@@ -138,6 +138,7 @@ Un proceso de desarrollo personal y emocional basado en psicología aplicada y t
 - Pago único: ${FULL_PRICE_LABEL}.
 - En 2 pagos: ${SPLIT_TOTAL_LABEL} en total, 2 pagos de ${SPLIT_INSTALLMENT_LABEL}. El primero reserva el lugar y el segundo se paga ${BALANCE_DEADLINE_LABEL}.
 - Pagando todo junto se ahorra ${FULL_SAVINGS_LABEL} frente al plan en 2 pagos.
+- Estos son los únicos precios vigentes. Si antes en esta charla se mencionó otro precio, ese valor ya no corre: aclaralo con naturalidad (por ejemplo "te actualizo el precio: el plan en 2 pagos ahora es de 2 pagos de ${SPLIT_INSTALLMENT_LABEL}") y usá siempre los de arriba.
 - Se paga con Mercado Pago (tarjeta de crédito o débito, dinero en cuenta, o efectivo en Rapipago / Pago Fácil). La web nunca ve los datos de la tarjeta. Con tarjeta de crédito, Mercado Pago puede ofrecer cuotas con su propio interés.
 - Apenas se acredita el pago, llega por este WhatsApp la entrada con un QR personal, que se escanea en la puerta los dos días. Si se paga en efectivo, puede tardar unas horas en acreditarse.
 - Si alguien que ya compró pide su entrada, su QR o el link del saldo, usá la herramienta reenviar_mi_entrada.
