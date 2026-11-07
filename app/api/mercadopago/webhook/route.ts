@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { processMercadoPagoPayment } from '@/app/lib/entradas-flow';
-import { verifyMercadoPagoSignature } from '@/app/lib/mercadopago';
+import { MercadoPagoError, verifyMercadoPagoSignature } from '@/app/lib/mercadopago';
 import { getSiteUrl } from '@/app/lib/site';
 
 export const dynamic = 'force-dynamic';
@@ -11,8 +11,9 @@ export const maxDuration = 30;
   Notificaciones de Mercado Pago. Llegan en dos formatos:
   - Webhooks: ?type=payment&data.id=123 (y el mismo dato en el body).
   - IPN viejo: ?topic=payment&id=123.
-  Ignoramos merchant_order y el resto. Respondemos 500 solo si fallo algo
-  nuestro, para que MP reintente.
+  Ignoramos merchant_order y el resto, y los pagos que MP no encuentra (200,
+  para que no reintente). Respondemos 500 solo ante errores reales (token,
+  API de MP caida, base de datos), con un codigo que dice cual fue.
 */
 export async function POST(request: NextRequest) {
   const url = new URL(request.url);
@@ -45,10 +46,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await processMercadoPagoPayment(String(dataId), getSiteUrl(url.origin));
-    return NextResponse.json({ ok: true, handled: result.handled });
+    return NextResponse.json(result.handled ? { ok: true } : { ok: true, ignored: result.reason });
   } catch (error) {
     console.error('[mercadopago] error procesando el pago', dataId, error);
-    return NextResponse.json({ error: 'processing failed' }, { status: 500 });
+    const reason =
+      error instanceof MercadoPagoError
+        ? error.status === 0
+          ? 'mp_not_configured'
+          : `mp_${error.status}`
+        : 'internal';
+    return NextResponse.json({ error: 'processing failed', reason }, { status: 500 });
   }
 }
 

@@ -35,7 +35,14 @@ import {
   type TicketLinks,
 } from './entradas-mensajes';
 import { EDITION_LABEL, EDITION_NAME } from './inscripcion';
-import { createCheckoutPreference, getMercadoPagoPayment, hasMercadoPago, parseExternalReference } from './mercadopago';
+import {
+  MercadoPagoError,
+  createCheckoutPreference,
+  getMercadoPagoPayment,
+  hasMercadoPago,
+  parseExternalReference,
+  type MercadoPagoPayment,
+} from './mercadopago';
 import { toWhatsAppNumber } from './phone';
 import { isPublicHttps } from './site';
 import { listSignups, updateSignup } from './supabase/db';
@@ -200,7 +207,17 @@ async function syncSignupStatus(ticket: Ticket) {
 /* ------------------------------------------------------------ mercado pago */
 
 export async function processMercadoPagoPayment(paymentId: string, siteUrl: string) {
-  const payment = await getMercadoPagoPayment(paymentId);
+  let payment: MercadoPagoPayment;
+  try {
+    payment = await getMercadoPagoPayment(paymentId);
+  } catch (error) {
+    // Pago que MP no conoce (por ejemplo, la "Simular notificacion" del panel):
+    // no hay nada que hacer y no queremos que MP reintente.
+    if (error instanceof MercadoPagoError && error.status === 404) {
+      return { handled: false as const, reason: 'payment-not-found' };
+    }
+    throw error;
+  }
   const reference = parseExternalReference(payment.external_reference);
   if (!reference) return { handled: false as const, reason: 'not-a-ticket' };
   if (payment.currency_id && payment.currency_id !== 'ARS') return { handled: false as const, reason: 'currency' };

@@ -16,13 +16,24 @@ function mpApi() {
   return (process.env.MP_API_URL?.trim() || 'https://api.mercadopago.com').replace(/\/+$/, '');
 }
 
+// Error de la API de MP con su status HTTP (0 = falta el token).
+export class MercadoPagoError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = 'MercadoPagoError';
+  }
+}
+
 export function hasMercadoPago() {
   return Boolean(process.env.MP_ACCESS_TOKEN?.trim());
 }
 
 function accessToken() {
   const token = process.env.MP_ACCESS_TOKEN?.trim();
-  if (!token) throw new Error('MP_NOT_CONFIGURED');
+  if (!token) throw new MercadoPagoError('MP_ACCESS_TOKEN no configurado', 0);
   return token;
 }
 
@@ -39,7 +50,7 @@ async function mpFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`MP ${response.status} ${path}: ${text.slice(0, 300)}`);
+    throw new MercadoPagoError(`MP ${response.status} ${path}: ${text.slice(0, 300)}`, response.status);
   }
   return (text ? JSON.parse(text) : {}) as T;
 }
