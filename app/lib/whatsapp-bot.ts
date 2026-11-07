@@ -10,6 +10,7 @@ import {
   EVENT_PLACE,
   FULL_PRICE_LABEL,
   FULL_SAVINGS_LABEL,
+  SHOW_REMAINING_AT,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
   TICKET_CAPACITY,
@@ -112,7 +113,7 @@ Tu objetivo es entender qué busca cada persona, despejar sus dudas y, si el tal
 7. Después del pago: felicitala y contale qué esperar (le llega por acá la entrada con QR, la dirección exacta antes del taller, y que venga con ropa cómoda).
 Reglas de venta:
 - Si preguntan el precio, respondé directo con los dos valores y después hacé una pregunta. Nunca "te lo paso por privado" ni lo esquives.
-- Nada de urgencia falsa. Solo escasez real: el cupo es de ${TICKET_CAPACITY} personas y, si el contexto dice cuántos lugares quedan, podés decirlo.
+- Nada de urgencia falsa. Solo escasez real: el grupo es de hasta ${TICKET_CAPACITY} personas y, solo si el contexto dice que quedan pocos lugares, podés decir cuántos quedan. Si no, decí simplemente que todavía hay lugar.
 - No inventes testimonios, resultados ni datos.
 - Si la persona ya hizo ediciones anteriores, reconocelo con calidez y contale que esta edición viene renovada, con dinámicas nuevas de alto impacto.
 - Si te preguntan si sos un bot, respondé con honestidad que sos el asistente automático de Metamorfosis y que una persona del equipo puede seguir la charla.
@@ -146,6 +147,7 @@ Un proceso de desarrollo personal y emocional basado en psicología aplicada y t
 
 # Límites
 - Usá solo la información de este mensaje y la del contexto de la conversación. Si te preguntan algo que no está acá (por ejemplo devoluciones, cambio de titular, comidas o alojamiento), decí con honestidad que no tenés ese dato y ofrecé lo que sí sabés; para esos casos la persona puede escribir por Instagram a @${INSTAGRAM_USERNAME}. No inventes datos, horarios, políticas ni precios.
+- Las ventas son información interna del equipo: nunca digas cuántas entradas se vendieron o se confirmaron, cuántas personas se anotaron o pagaron (tampoco que todavía no se anotó nadie o que están todos los lugares libres), ni nada de otras personas. Si preguntan cuántos van o cuántos lugares quedan, respondé que todavía hay lugar (y cuántos quedan solo si el contexto lo dice) y seguí la charla. Si antes en esta charla se dio ese dato, no lo repitas.
 - No confirmes pagos que no figuren en el contexto. Si alguien dice que pagó y su entrada no figura como pagada, explicale que el sistema lo confirma solo apenas Mercado Pago lo acredita.
 - No hagas terapia ni diagnósticos por chat. Si alguien expresa una crisis o un riesgo, respondé con cuidado y calidez, no vendas, sugerile que hable ya con alguien de confianza y con ayuda profesional, y pasale el Centro de Asistencia al Suicida: 135 (gratis desde CABA y GBA) o (011) 5275-1135 desde todo el país; ante una emergencia, 911.
 - Si el mensaje no tiene que ver con Metamorfosis, respondé breve y amable y volvé al tema del taller.
@@ -174,6 +176,16 @@ function describeTicket(ticket: BotTicket) {
   return `- ${parts.join(' · ')}`;
 }
 
+// El numero exacto solo llega a la IA cuando quedan pocos (como en la web):
+// asi no puede contar cuantas se vendieron.
+function seatsLine(remaining: number | null) {
+  if (remaining === 0) return 'Lugares: el cupo está completo, no quedan lugares.';
+  if (remaining !== null && remaining <= SHOW_REMAINING_AT) {
+    return `Lugares: quedan pocos, ${remaining === 1 ? 'queda 1 lugar' : `quedan ${remaining} lugares`}.`;
+  }
+  return 'Lugares: todavía hay lugar. No digas cuántos quedan ni cuántos se vendieron.';
+}
+
 function buildContextMessage(context: BotContext) {
   const flyer = context.flyerSentNow
     ? 'Se le acaba de mandar la imagen del flyer.'
@@ -187,7 +199,7 @@ function buildContextMessage(context: BotContext) {
       ? 'Es el primer contacto de esta persona: respondé con la bienvenida.'
       : 'No es el primer contacto: seguí la conversación.',
     flyer,
-    `Lugares disponibles en la 7ma edición: ${context.remaining === null ? 'sin dato' : `${context.remaining} de ${TICKET_CAPACITY}`}.`,
+    seatsLine(context.remaining),
     context.tickets.length
       ? `Entradas asociadas a este número:\n${context.tickets.map(describeTicket).join('\n')}`
       : 'Este número no tiene entradas compradas.',

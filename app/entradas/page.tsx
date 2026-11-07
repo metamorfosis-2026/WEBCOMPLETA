@@ -1,7 +1,14 @@
 import type { Metadata } from 'next';
 
 import { TicketCheckout } from '@/app/components/TicketCheckout';
-import { EVENT_HOURS_LABEL, EVENT_PLACE, FLYER_PATH, TICKET_CAPACITY, businessWhatsAppUrl } from '@/app/lib/entradas';
+import {
+  EVENT_HOURS_LABEL,
+  EVENT_PLACE,
+  FLYER_PATH,
+  SHOW_REMAINING_AT,
+  TICKET_CAPACITY,
+  businessWhatsAppUrl,
+} from '@/app/lib/entradas';
 import { INSTAGRAM_DM_URL } from '@/app/lib/inscripcion';
 import { getSiteUrl } from '@/app/lib/site';
 import { countSoldTicketsCached } from '@/app/lib/supabase/tickets';
@@ -48,9 +55,6 @@ const TAKEAWAYS = [
   { text: 'Mirar tus vínculos y tus patrones con otra claridad.', short: 'Mirar tus vínculos con otra claridad' },
   { text: 'Herramientas concretas para usar en tu día a día.', short: 'Herramientas para tu día a día' },
 ];
-
-// "Quedan N lugares" solo cuando son pocos de verdad.
-const SHOW_REMAINING_AT = 20;
 
 const WHATSAPP_QUESTION_URL = businessWhatsAppUrl('Hola, quiero consultar por el taller de noviembre');
 

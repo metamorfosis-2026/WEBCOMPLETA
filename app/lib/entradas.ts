@@ -35,6 +35,9 @@ export const TICKET_PLANS: Record<TicketPlan, TicketPlanInfo> = {
 const PREVIOUS_SPLIT_PRICES = [{ firstCents: 5_000_000, totalCents: 10_000_000 }];
 
 export const TICKET_CAPACITY = WAITLIST_MAX;
+// Cuantos lugares quedan se dice (en la web y en el WhatsApp) solo cuando son
+// pocos de verdad. Con mas, solo "hay lugar": las ventas son dato interno.
+export const SHOW_REMAINING_AT = 20;
 export const TICKET_CODE_PREFIX = 'M7';
 export const TICKET_CODE_RE = /\bM7-[2-9A-HJ-NP-Z]{8}\b/i;
 
