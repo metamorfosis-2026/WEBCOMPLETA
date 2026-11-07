@@ -118,7 +118,9 @@ export default async function EntradasPage() {
         </section>
 
         {/* ------------------------------------------------------ checkout */}
-        <aside aria-label="Comprar entrada" className="border-t border-ivory/10 pt-10 lg:border-0 lg:pt-0">
+        {/* self-stretch: la columna ocupa todo el alto de la fila, asi la card
+            sticky tiene lugar para quedarse fija mientras se scrollea. */}
+        <aside aria-label="Comprar entrada" className="border-t border-ivory/10 pt-10 lg:self-stretch lg:border-0 lg:pt-0">
           <div className="lg:sticky lg:top-8 lg:rounded-[28px] lg:border lg:border-ivory/10 lg:bg-[#0A1120]/90 lg:p-8 lg:shadow-[0_40px_120px_-60px_rgba(124,201,236,0.5)]">
             {remaining === 0 ? (
               <div>
