@@ -59,42 +59,48 @@ export default async function EntradasPage() {
     <EntradasShell wide>
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,27rem)] lg:items-start lg:gap-16 xl:gap-24">
         {/* ------------------------------------------------------- evento */}
-        <section aria-labelledby="titulo-taller" className="lg:pt-4">
+        {/* Celular y tablet (< lg): todo centrado sobre el mismo eje.
+            Escritorio (lg): alineado a la izquierda, como siempre. */}
+        <section aria-labelledby="titulo-taller" className="text-center lg:pt-4 lg:text-left">
           <p className="text-[15px] font-medium text-celeste">Metamorfosis · 7ma edición</p>
           <h1
             id="titulo-taller"
-            className="display mt-3 max-w-[14ch] text-[2.4rem] leading-[1.05] text-white [text-wrap:balance] sm:text-[3.1rem] lg:text-[3.6rem]"
+            className="display mx-auto mt-3 max-w-[14ch] text-[2.1rem] leading-[1.05] text-white [text-wrap:balance] min-[380px]:text-[2.4rem] sm:text-[3.1rem] lg:mx-0 lg:text-[3.6rem]"
           >
             Taller vivencial de inteligencia emocional
           </h1>
-          <p className="mt-5 max-w-[34rem] text-[17px] leading-relaxed text-ivory/75 [text-wrap:balance] sm:text-[19px]">
+          <p className="mx-auto mt-5 max-w-[34rem] text-[17px] leading-relaxed text-ivory/75 [text-wrap:balance] sm:text-[19px] lg:mx-0">
             Un fin de semana para frenar, entender lo que sentís y salir con herramientas que se usan.
           </p>
 
-          {/* Fecha + datos en un solo panel: en celular la fecha arriba y los
-              datos en 2 columnas; desde sm, fecha a la izquierda y datos al lado. */}
-          <div className="mt-9 rounded-2xl border border-ivory/10 bg-white/[0.03] p-4 sm:inline-flex sm:items-center sm:gap-8 sm:p-6">
-            <div className="flex items-center gap-4 sm:flex-col sm:items-start sm:gap-2">
-              <p className="numeric text-[2.9rem] font-bold leading-none text-white sm:text-[3.4rem]">
+          {/* Fecha + datos en un solo panel: en celular la fecha centrada arriba y
+              los datos en 2x2 (icono arriba del texto); en escritorio, fecha a la
+              izquierda y datos al lado. */}
+          <div className="mt-9 rounded-2xl border border-ivory/10 bg-white/[0.03] px-4 py-5 lg:inline-flex lg:items-center lg:gap-8 lg:p-6">
+            <div className="flex items-center justify-center gap-4 lg:flex-col lg:items-start lg:gap-2">
+              <p className="numeric text-[2.9rem] font-bold leading-none text-white lg:text-[3.4rem]">
                 <span className="sr-only">28 y 29 de noviembre de 2026</span>
                 <span aria-hidden="true">28–29</span>
               </p>
               <p aria-hidden="true" className="text-[13px] font-semibold leading-tight tracking-[0.18em] text-celeste">
-                <span className="mr-2 sm:mr-0 sm:block">NOV</span>
-                <span className="sm:block">2026</span>
+                <span className="mr-2 lg:mr-0 lg:block">NOV</span>
+                <span className="lg:block">2026</span>
               </p>
             </div>
 
-            <div aria-hidden="true" className="my-5 h-px bg-ivory/10 sm:my-0 sm:h-24 sm:w-px" />
+            <div aria-hidden="true" className="my-5 h-px bg-ivory/10 lg:my-0 lg:h-24 lg:w-px" />
 
-            <ul className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-3 sm:grid-cols-1 sm:gap-y-2.5">
+            <ul className="grid grid-cols-2 gap-x-3 gap-y-5 lg:grid-cols-1 lg:gap-y-2.5">
               {FACTS.map(({ icon: Icon, text, short }) => (
-                <li key={text} className="flex items-center gap-2 whitespace-nowrap text-[14px] text-ivory/85 sm:gap-2.5 sm:text-[15px]">
+                <li
+                  key={text}
+                  className="flex flex-col items-center gap-1.5 whitespace-nowrap text-[14px] text-ivory/85 lg:flex-row lg:gap-2.5 lg:text-[15px]"
+                >
                   <Icon className="h-5 w-5 flex-none text-celeste" />
                   {short ? (
                     <>
-                      <span className="sm:hidden">{short}</span>
-                      <span className="hidden sm:inline">{text}</span>
+                      <span className="lg:hidden">{short}</span>
+                      <span className="hidden lg:inline">{text}</span>
                     </>
                   ) : (
                     text
@@ -106,10 +112,13 @@ export default async function EntradasPage() {
 
           <div className="mt-10 border-t border-ivory/10 pt-8">
             <h2 className="text-[17px] font-semibold text-white">Qué te llevás</h2>
-            <ul className="mt-4 grid gap-3.5">
+            <ul className="mt-5 grid gap-5 lg:mt-4 lg:gap-3.5">
               {TAKEAWAYS.map((item) => (
-                <li key={item} className="flex gap-3 text-[16px] leading-relaxed text-ivory/80">
-                  <CheckIcon className="mt-0.5 h-5 w-5 flex-none text-celeste" />
+                <li
+                  key={item}
+                  className="flex flex-col items-center gap-2 text-[16px] leading-relaxed text-ivory/80 lg:flex-row lg:items-start lg:gap-3"
+                >
+                  <CheckIcon className="h-5 w-5 flex-none text-celeste lg:mt-0.5" />
                   <span className="[text-wrap:balance]">{item}</span>
                 </li>
               ))}
@@ -123,7 +132,7 @@ export default async function EntradasPage() {
         <aside aria-label="Comprar entrada" className="border-t border-ivory/10 pt-10 lg:self-stretch lg:border-0 lg:pt-0">
           <div className="lg:sticky lg:top-8 lg:rounded-[28px] lg:border lg:border-ivory/10 lg:bg-[#0A1120]/90 lg:p-8 lg:shadow-[0_40px_120px_-60px_rgba(124,201,236,0.5)]">
             {remaining === 0 ? (
-              <div>
+              <div className="text-center lg:text-left">
                 <h2 className="display-sm text-[1.6rem] leading-tight text-white">Se agotaron las entradas</h2>
                 <p className="mt-3 text-[16px] leading-relaxed text-ivory/75">
                   Se completaron los {TICKET_CAPACITY} lugares de esta edición. Escribinos por Instagram y te sumamos a la

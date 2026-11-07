@@ -138,6 +138,8 @@ export function TicketCheckout({
   const redirecting = Boolean(redirectUrl);
   const busy = isPending || redirecting;
   const showErrors = touched;
+  // /entradas en celular (< lg): textos, campos y avisos centrados. Escritorio igual que siempre.
+  const center = variant === 'page' ? ' text-center lg:text-left' : '';
 
   const buttonLabel = !hydrated
     ? 'Cargando…'
@@ -155,8 +157,11 @@ export function TicketCheckout({
     setError(null);
     if (!hydrated || busy) return;
     if (!isValid) {
-      // Llevamos a la persona al primer dato que falta (en celular puede estar arriba).
-      (!nameOk ? nameRef : !phoneOk ? phoneRef : emailRef).current?.focus();
+      // Llevamos a la persona al primer dato que falta, al centro de la pantalla:
+      // con el scroll normal del foco quedaba tapado por la barra fija del celular.
+      const target = (!nameOk ? nameRef : !phoneOk ? phoneRef : emailRef).current;
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -212,24 +217,100 @@ export function TicketCheckout({
         ) : null}
 
         {variant === 'page' ? (
-          <div>
+          <div className={center}>
             <h2 className="display-sm text-[1.6rem] leading-tight text-white">Reservá tu lugar</h2>
-            <p className="mt-1.5 text-[15px] text-ivory/70">Elegí cómo pagar y completá tus datos.</p>
+            <p className="mt-1.5 text-[15px] text-ivory/70 [text-wrap:balance]">Elegí cómo pagar y completá tus datos.</p>
           </div>
         ) : null}
 
         {typeof remaining === 'number' && remaining > 0 && remaining <= 15 ? (
-          <p className="mt-4 inline-flex rounded-full border border-sand/40 bg-sand/10 px-3 py-1 text-[13px] font-medium text-sand">
-            {remaining === 1 ? 'Queda 1 lugar' : `Quedan ${remaining} lugares`}
-          </p>
+          <div className={center}>
+            <p className="mt-4 inline-flex rounded-full border border-sand/40 bg-sand/10 px-3 py-1 text-[13px] font-medium text-sand">
+              {remaining === 1 ? 'Queda 1 lugar' : `Quedan ${remaining} lugares`}
+            </p>
+          </div>
         ) : null}
 
         <fieldset className={variant === 'modal' ? 'mt-5' : 'mt-6'}>
-          <legend className={labelClass}>Forma de pago</legend>
+          <legend className={`${labelClass}${variant === 'page' ? ' w-full text-center lg:text-left' : ''}`}>
+            Forma de pago
+          </legend>
           <div className="mt-3 grid gap-3">
             {(Object.keys(PLAN_COPY) as TicketPlan[]).map((id) => {
               const copy = PLAN_COPY[id];
               const active = plan === id;
+              const radio = (
+                <input
+                  type="radio"
+                  name={`plan-${ids}`}
+                  value={id}
+                  checked={active}
+                  onChange={() => setPlan(id)}
+                  className="sr-only"
+                />
+              );
+
+              /*
+                /entradas en celular: contenido centrado y la opcion elegida
+                marcada con borde, brillo y un check en la esquina (el radio
+                sigue ahi, invisible, para teclado y lectores de pantalla).
+                En escritorio, la misma fila de siempre con el radio a la izquierda.
+              */
+              if (variant === 'page') {
+                return (
+                  <label
+                    key={id}
+                    className={`relative flex cursor-pointer flex-col items-center rounded-2xl border px-5 py-5 text-center transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-celeste/70 lg:flex-row lg:gap-4 lg:px-5 lg:py-4 lg:text-left lg:shadow-none ${
+                      active
+                        ? 'border-celeste bg-celeste/[0.08] shadow-[0_0_0_1px_rgba(124,201,236,0.55),0_14px_40px_-14px_rgba(124,201,236,0.6)]'
+                        : 'border-ivory/15 [@media(hover:hover)]:hover:border-ivory/35'
+                    }`}
+                  >
+                    {radio}
+                    {active ? (
+                      <span
+                        aria-hidden="true"
+                        className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-celeste text-night lg:hidden"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m5 12.5 4.5 4.5L19 7.5" />
+                        </svg>
+                      </span>
+                    ) : null}
+
+                    {/* celular */}
+                    <span className="flex flex-col items-center lg:hidden">
+                      <span className="text-[15px] font-semibold text-white">{copy.title}</span>
+                      <span className="numeric mt-1 text-[2rem] font-semibold leading-tight text-white">{copy.price}</span>
+                      <span className="mt-1.5 max-w-[17rem] text-[14px] leading-snug text-ivory/70 [text-wrap:balance]">
+                        {copy.detail}
+                      </span>
+                      <span className={`mt-1.5 text-[13px] font-medium ${id === 'FULL' ? 'text-celeste' : 'text-ivory/60'}`}>
+                        {copy.note}
+                      </span>
+                    </span>
+
+                    {/* escritorio */}
+                    <span
+                      aria-hidden="true"
+                      className={`hidden h-5 w-5 flex-none items-center justify-center rounded-full border-2 lg:flex ${
+                        active ? 'border-celeste' : 'border-ivory/35'
+                      }`}
+                    >
+                      {active ? <span className="h-2.5 w-2.5 rounded-full bg-celeste" /> : null}
+                    </span>
+                    <span className="hidden min-w-0 flex-1 lg:block">
+                      <span className="block text-[16px] font-semibold text-white">{copy.title}</span>
+                      <span className="mt-0.5 block text-[14px] leading-snug text-ivory/70">{copy.detail}</span>
+                    </span>
+                    <span className="hidden flex-none text-right lg:block">
+                      <span className="numeric block text-[1.55rem] font-medium leading-tight text-white">{copy.price}</span>
+                      <span className={`block text-[13px] ${id === 'FULL' ? 'text-celeste' : 'text-ivory/60'}`}>{copy.note}</span>
+                    </span>
+                  </label>
+                );
+              }
+
               return (
                 <label
                   key={id}
@@ -237,14 +318,7 @@ export function TicketCheckout({
                     active ? 'border-celeste bg-celeste/[0.08]' : 'border-ivory/15 hover:border-ivory/35'
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name={`plan-${ids}`}
-                    value={id}
-                    checked={active}
-                    onChange={() => setPlan(id)}
-                    className="sr-only"
-                  />
+                  {radio}
                   <span
                     aria-hidden="true"
                     className={`flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 ${
@@ -273,13 +347,13 @@ export function TicketCheckout({
 
         <div className="mt-7 grid gap-5">
           <div>
-            <label htmlFor={fieldIds.name} className={labelClass}>
+            <label htmlFor={fieldIds.name} className={`${labelClass}${center}`}>
               Nombre y apellido
             </label>
             <input
               ref={nameRef}
               id={fieldIds.name}
-              className={inputClass(showErrors && !nameOk)}
+              className={`${inputClass(showErrors && !nameOk)}${center}`}
               placeholder="Juana Pérez"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -289,20 +363,20 @@ export function TicketCheckout({
               aria-describedby={showErrors && !nameOk ? fieldIds.nameError : undefined}
             />
             {showErrors && !nameOk ? (
-              <p id={fieldIds.nameError} className={errorTextClass}>
+              <p id={fieldIds.nameError} className={`${errorTextClass}${center}`}>
                 Escribí tu nombre y apellido.
               </p>
             ) : null}
           </div>
 
           <div>
-            <label htmlFor={fieldIds.phone} className={labelClass}>
+            <label htmlFor={fieldIds.phone} className={`${labelClass}${center}`}>
               WhatsApp
             </label>
             <input
               ref={phoneRef}
               id={fieldIds.phone}
-              className={inputClass(showErrors && !phoneOk)}
+              className={`${inputClass(showErrors && !phoneOk)}${center}`}
               placeholder="11 6445 0430"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -312,7 +386,7 @@ export function TicketCheckout({
               aria-invalid={showErrors && !phoneOk}
               aria-describedby={fieldIds.phoneHint}
             />
-            <p id={fieldIds.phoneHint} className={showErrors && !phoneOk ? errorTextClass : hintClass}>
+            <p id={fieldIds.phoneHint} className={`${showErrors && !phoneOk ? errorTextClass : hintClass}${center}`}>
               {showErrors && !phoneOk ? (
                 ERROR_TEXT.PHONE
               ) : phoneOk ? (
@@ -326,13 +400,13 @@ export function TicketCheckout({
           </div>
 
           <div>
-            <label htmlFor={fieldIds.email} className={labelClass}>
+            <label htmlFor={fieldIds.email} className={`${labelClass}${center}`}>
               Email <span className="font-normal text-ivory/55">(opcional)</span>
             </label>
             <input
               ref={emailRef}
               id={fieldIds.email}
-              className={inputClass(showErrors && !emailOk)}
+              className={`${inputClass(showErrors && !emailOk)}${center}`}
               placeholder="juana@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -342,7 +416,7 @@ export function TicketCheckout({
               aria-invalid={showErrors && !emailOk}
               aria-describedby={fieldIds.emailHint}
             />
-            <p id={fieldIds.emailHint} className={showErrors && !emailOk ? errorTextClass : hintClass}>
+            <p id={fieldIds.emailHint} className={`${showErrors && !emailOk ? errorTextClass : hintClass}${center}`}>
               {showErrors && !emailOk ? 'Revisá el email o dejalo vacío.' : 'Para el comprobante de Mercado Pago.'}
             </p>
           </div>
@@ -368,7 +442,7 @@ export function TicketCheckout({
           <div
             ref={alertRef}
             role="alert"
-            className="mt-6 scroll-mb-32 rounded-xl border border-sand/40 bg-sand/[0.08] p-4 text-[15px] leading-relaxed text-sand"
+            className={`mt-6 scroll-mb-32 rounded-xl border border-sand/40 bg-sand/[0.08] p-4 text-[15px] leading-relaxed text-sand${center}`}
           >
             {ERROR_TEXT[error]}
             {error === 'SOLD_OUT' || error === 'PAYMENTS_OFF' ? (
@@ -411,19 +485,21 @@ export function TicketCheckout({
           className="fixed inset-x-0 bottom-0 z-40 border-t border-ivory/10 bg-[#070B15] shadow-[0_-12px_32px_rgba(0,0,0,0.55)] lg:hidden"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
-          <div className="mx-auto flex w-full max-w-xl items-center gap-4 px-5 py-3">
-            <div className="min-w-0 flex-1" aria-live="polite">
-              <p className="truncate text-[13px] text-ivory/70">
+          {/* Plan y total centrados en una linea, boton a ancho completo abajo
+              (la barra queda en ~106 px de alto, sin contar el borde seguro del iPhone). */}
+          <div className="mx-auto w-full max-w-xl px-5 pb-3 pt-2.5">
+            <p className="truncate text-center leading-tight" aria-live="polite">
+              <span className="align-middle text-[13px] text-ivory/70">
                 {plan === 'FULL' ? 'Pago único' : `1 de 2 pagos · total ${SPLIT_TOTAL_LABEL}`}
-              </p>
-              <p className="numeric text-[1.45rem] leading-tight text-white">{firstPayment}</p>
-            </div>
+              </span>
+              <span className="numeric ml-2 align-middle text-[1.35rem] font-semibold text-white">{firstPayment}</span>
+            </p>
             <button
               type="submit"
               form={formId}
               disabled={busy || !hydrated}
               aria-busy={busy || !hydrated}
-              className="h-12 min-w-[7.5rem] flex-none rounded-xl bg-celeste px-6 text-[15px] font-semibold text-night transition [@media(hover:hover)]:hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-night disabled:cursor-wait disabled:opacity-75"
+              className="mt-2 h-12 w-full rounded-xl bg-celeste px-6 text-[16px] font-semibold text-night transition [@media(hover:hover)]:hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-night disabled:cursor-wait disabled:opacity-75"
             >
               {!hydrated
                 ? 'Cargando…'
