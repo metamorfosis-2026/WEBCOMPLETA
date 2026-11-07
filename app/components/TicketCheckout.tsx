@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'reac
 import { createPortal } from 'react-dom';
 
 import { startTicketCheckout, type CheckoutError } from '@/app/actions/entradas';
-import { LockIcon } from '@/app/entradas/icons';
+import { LockIcon, QrIcon } from '@/app/entradas/icons';
 import {
   BALANCE_DEADLINE_LABEL,
   EVENT_DATE_LABEL,
@@ -40,17 +40,22 @@ const REDIRECT_FALLBACK_MS = 6000;
 
 const SAVINGS_LABEL = formatPesos(TICKET_PLANS.SPLIT.totalCents - TICKET_PLANS.FULL.totalCents);
 
-const PLAN_COPY: Record<TicketPlan, { title: string; detail: string; price: string; note: string }> = {
+// `amount` y `times`: el precio partido para la opcion angosta del celular
+// ("2×" chico al lado del monto, asi nunca se corta en dos lineas).
+const PLAN_COPY: Record<TicketPlan, { title: string; detail: string; price: string; amount: string; times?: string; note: string }> = {
   FULL: {
     title: 'Pago único',
     detail: 'Pagás todo hoy y listo.',
     price: FULL_PRICE_LABEL,
+    amount: FULL_PRICE_LABEL,
     note: `Ahorrás ${SAVINGS_LABEL}`,
   },
   SPLIT: {
     title: 'En 2 pagos',
     detail: `Hoy ${SPLIT_INSTALLMENT_LABEL} y el resto ${BALANCE_DEADLINE_LABEL}.`,
     price: `2 × ${SPLIT_INSTALLMENT_LABEL}`,
+    amount: SPLIT_INSTALLMENT_LABEL,
+    times: '2×',
     note: `Total ${SPLIT_TOTAL_LABEL}`,
   },
 };
@@ -59,8 +64,9 @@ const labelClass = 'block text-[14px] font-medium text-ivory/90';
 const hintClass = 'mt-2 text-[13px] leading-relaxed text-ivory/60 [text-wrap:balance]';
 const errorTextClass = 'mt-2 text-[13px] leading-relaxed text-sand [text-wrap:balance]';
 
-function inputClass(invalid: boolean) {
-  return `mt-2 h-[52px] w-full rounded-xl border bg-white/[0.04] px-4 text-[16px] text-white outline-none transition placeholder:text-ivory/35 focus:border-celeste focus:bg-white/[0.07] focus:ring-2 focus:ring-celeste/30 ${
+// compact: /entradas en celular (campos de 48 px, siguen comodos para el dedo).
+function inputClass(invalid: boolean, compact = false) {
+  return `${compact ? 'mt-1.5 h-12 lg:mt-2 lg:h-[52px]' : 'mt-2 h-[52px]'} w-full rounded-xl border bg-white/[0.04] px-4 text-[16px] text-white outline-none transition placeholder:text-ivory/35 focus:border-celeste focus:bg-white/[0.07] focus:ring-2 focus:ring-celeste/30 ${
     invalid ? 'border-sand/70' : 'border-ivory/15 hover:border-ivory/30'
   }`;
 }
@@ -75,11 +81,9 @@ function inputClass(invalid: boolean) {
 export function TicketCheckout({
   source = 'web',
   variant = 'section',
-  remaining,
 }: {
   source?: string;
   variant?: 'page' | 'section' | 'modal';
-  remaining?: number | null;
 }) {
   const ids = useId();
   const formId = `checkout-${ids}`;
@@ -138,8 +142,9 @@ export function TicketCheckout({
   const redirecting = Boolean(redirectUrl);
   const busy = isPending || redirecting;
   const showErrors = touched;
+  const isPage = variant === 'page';
   // /entradas en celular (< lg): textos, campos y avisos centrados. Escritorio igual que siempre.
-  const center = variant === 'page' ? ' text-center lg:text-left' : '';
+  const center = isPage ? ' text-center lg:text-left' : '';
 
   const buttonLabel = !hydrated
     ? 'Cargando…'
@@ -216,26 +221,17 @@ export function TicketCheckout({
           </div>
         ) : null}
 
-        {variant === 'page' ? (
+        {isPage ? (
           <div className={center}>
             <h2 className="display-sm text-[1.6rem] leading-tight text-white">Reservá tu lugar</h2>
-            <p className="mt-1.5 text-[15px] text-ivory/70 [text-wrap:balance]">Elegí cómo pagar y completá tus datos.</p>
-          </div>
-        ) : null}
-
-        {typeof remaining === 'number' && remaining > 0 && remaining <= 15 ? (
-          <div className={center}>
-            <p className="mt-4 inline-flex rounded-full border border-sand/40 bg-sand/10 px-3 py-1 text-[13px] font-medium text-sand">
-              {remaining === 1 ? 'Queda 1 lugar' : `Quedan ${remaining} lugares`}
-            </p>
+            <p className="mt-1 text-[15px] text-ivory/70 [text-wrap:balance] lg:mt-1.5">Elegí cómo pagar y completá tus datos.</p>
           </div>
         ) : null}
 
         <fieldset className={variant === 'modal' ? 'mt-5' : 'mt-6'}>
-          <legend className={`${labelClass}${variant === 'page' ? ' w-full text-center lg:text-left' : ''}`}>
-            Forma de pago
-          </legend>
-          <div className="mt-3 grid gap-3">
+          <legend className={`${labelClass}${isPage ? ' w-full text-center lg:text-left' : ''}`}>Forma de pago</legend>
+          {/* /entradas en celular: las dos opciones lado a lado. */}
+          <div className={`mt-3 grid gap-3${isPage ? ' grid-cols-2 lg:grid-cols-1' : ''}`}>
             {(Object.keys(PLAN_COPY) as TicketPlan[]).map((id) => {
               const copy = PLAN_COPY[id];
               const active = plan === id;
@@ -251,16 +247,16 @@ export function TicketCheckout({
               );
 
               /*
-                /entradas en celular: contenido centrado y la opcion elegida
-                marcada con borde, brillo y un check en la esquina (el radio
-                sigue ahi, invisible, para teclado y lectores de pantalla).
-                En escritorio, la misma fila de siempre con el radio a la izquierda.
+                /entradas en celular: dos opciones lado a lado (nombre, precio y
+                una linea chica), la elegida con borde, brillo y un check en la
+                esquina. El radio sigue ahi, invisible, para teclado y lectores
+                de pantalla. En escritorio, la fila de siempre con el radio a la izquierda.
               */
-              if (variant === 'page') {
+              if (isPage) {
                 return (
                   <label
                     key={id}
-                    className={`relative flex cursor-pointer flex-col items-center rounded-2xl border px-5 py-5 text-center transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-celeste/70 lg:flex-row lg:gap-4 lg:px-5 lg:py-4 lg:text-left lg:shadow-none ${
+                    className={`relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border px-2 pb-3.5 pt-3 text-center transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-celeste/70 lg:flex-row lg:justify-start lg:gap-4 lg:px-5 lg:py-4 lg:text-left lg:shadow-none ${
                       active
                         ? 'border-celeste bg-celeste/[0.08] shadow-[0_0_0_1px_rgba(124,201,236,0.55),0_14px_40px_-14px_rgba(124,201,236,0.6)]'
                         : 'border-ivory/15 [@media(hover:hover)]:hover:border-ivory/35'
@@ -270,9 +266,9 @@ export function TicketCheckout({
                     {active ? (
                       <span
                         aria-hidden="true"
-                        className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-celeste text-night lg:hidden"
+                        className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-celeste text-night lg:hidden"
                       >
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round">
                           <path d="m5 12.5 4.5 4.5L19 7.5" />
                         </svg>
                       </span>
@@ -280,12 +276,12 @@ export function TicketCheckout({
 
                     {/* celular */}
                     <span className="flex flex-col items-center lg:hidden">
-                      <span className="text-[15px] font-semibold text-white">{copy.title}</span>
-                      <span className="numeric mt-1 text-[2rem] font-semibold leading-tight text-white">{copy.price}</span>
-                      <span className="mt-1.5 max-w-[17rem] text-[14px] leading-snug text-ivory/70 [text-wrap:balance]">
-                        {copy.detail}
+                      <span className="text-[14px] font-semibold text-ivory/90">{copy.title}</span>
+                      <span className="numeric mt-0.5 flex items-baseline whitespace-nowrap font-semibold leading-tight text-white">
+                        {copy.times ? <span className="mr-1 text-[15px] text-ivory/75">{copy.times}</span> : null}
+                        <span className="text-[1.6rem] min-[380px]:text-[1.75rem]">{copy.amount}</span>
                       </span>
-                      <span className={`mt-1.5 text-[13px] font-medium ${id === 'FULL' ? 'text-celeste' : 'text-ivory/60'}`}>
+                      <span className={`mt-0.5 text-[13px] font-medium ${id === 'FULL' ? 'text-celeste' : 'text-ivory/65'}`}>
                         {copy.note}
                       </span>
                     </span>
@@ -343,9 +339,13 @@ export function TicketCheckout({
               );
             })}
           </div>
+          {/* Celular: que implica el plan elegido, en una sola linea debajo de las dos opciones. */}
+          {isPage ? (
+            <p className="mt-3 text-center text-[14px] text-ivory/75 [text-wrap:balance] lg:hidden">{PLAN_COPY[plan].detail}</p>
+          ) : null}
         </fieldset>
 
-        <div className="mt-7 grid gap-5">
+        <div className={isPage ? 'mt-6 grid gap-4 lg:mt-7 lg:gap-5' : 'mt-7 grid gap-5'}>
           <div>
             <label htmlFor={fieldIds.name} className={`${labelClass}${center}`}>
               Nombre y apellido
@@ -353,7 +353,7 @@ export function TicketCheckout({
             <input
               ref={nameRef}
               id={fieldIds.name}
-              className={`${inputClass(showErrors && !nameOk)}${center}`}
+              className={`${inputClass(showErrors && !nameOk, isPage)}${center}`}
               placeholder="Juana Pérez"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -376,7 +376,7 @@ export function TicketCheckout({
             <input
               ref={phoneRef}
               id={fieldIds.phone}
-              className={`${inputClass(showErrors && !phoneOk)}${center}`}
+              className={`${inputClass(showErrors && !phoneOk, isPage)}${center}`}
               placeholder="11 6445 0430"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -406,7 +406,7 @@ export function TicketCheckout({
             <input
               ref={emailRef}
               id={fieldIds.email}
-              className={`${inputClass(showErrors && !emailOk)}${center}`}
+              className={`${inputClass(showErrors && !emailOk, isPage)}${center}`}
               placeholder="juana@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -473,10 +473,18 @@ export function TicketCheckout({
           </p>
         ) : null}
 
-        <p className="mt-4 text-center text-[13px] leading-relaxed text-ivory/60 [text-wrap:balance]">
-          <LockIcon className="-mt-0.5 mr-1.5 inline-block h-4 w-4 align-middle text-ivory/50" />
-          Pago seguro con Mercado Pago · Tu entrada con QR llega por WhatsApp
-        </p>
+        {/* Dos lineas cortas, cada una con su icono: asi no se corta a mitad de frase.
+            El bloque va centrado y los iconos quedan en columna. */}
+        <ul className={`${isPage ? 'mt-6 lg:mt-4' : 'mt-4'} mx-auto flex w-fit flex-col items-start gap-1.5 text-[13px] leading-snug text-ivory/70`}>
+          <li className="flex items-center gap-1.5">
+            <LockIcon className="h-4 w-4 flex-none text-ivory/55" />
+            Pago seguro con Mercado Pago
+          </li>
+          <li className="flex items-center gap-1.5">
+            <QrIcon className="h-4 w-4 flex-none text-ivory/55" />
+            Tu entrada con QR llega por WhatsApp
+          </li>
+        </ul>
       </form>
 
       {variant === 'page' ? (

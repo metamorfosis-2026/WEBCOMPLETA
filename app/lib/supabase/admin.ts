@@ -18,7 +18,16 @@ function freshFetch(input: RequestInfo | URL, init?: RequestInit) {
   });
 }
 
-export function createAdminClient() {
+/*
+  Para lecturas que se cachean con unstable_cache: mismo tope de tiempo pero sin
+  `cache: 'no-store'`, que dentro de una pagina con revalidate la volveria
+  dinamica. unstable_cache igual hace la consulta real cada vez que se renueva.
+*/
+function timedFetch(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(QUERY_TIMEOUT_MS) });
+}
+
+export function createAdminClient({ cacheable = false }: { cacheable?: boolean } = {}) {
   const { url, serviceRoleKey } = getSupabaseAdminEnv();
 
   return createClient(url, serviceRoleKey, {
@@ -26,6 +35,6 @@ export function createAdminClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
-    global: { fetch: freshFetch },
+    global: { fetch: cacheable ? timedFetch : freshFetch },
   });
 }

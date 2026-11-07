@@ -1,4 +1,5 @@
 import { customAlphabet } from 'nanoid';
+import { unstable_cache } from 'next/cache';
 
 import { TICKET_CODE_PREFIX, type TicketPlan, type TicketStatus } from '@/app/lib/entradas';
 
@@ -228,9 +229,9 @@ export async function listTicketsByStatus(statuses: TicketStatus[]) {
   return ((data ?? []) as DbTicket[]).map(mapTicket);
 }
 
-// Lugares ocupados: entradas con al menos un pago acreditado.
-export async function countSoldTickets() {
-  const supabase = createAdminClient();
+// Lugares ocupados: entradas con al menos un pago acreditado (pagadas o con
+// saldo pendiente). Las pendientes sin pago y las canceladas no cuentan.
+async function countSold(supabase: ReturnType<typeof createAdminClient>) {
   const { count, error } = await supabase
     .from('tickets')
     .select('id', { count: 'exact', head: true })
@@ -238,6 +239,18 @@ export async function countSoldTickets() {
   assertNoError(error);
   return count ?? 0;
 }
+
+// Conteo al momento: para decidir si se puede vender.
+export async function countSoldTickets() {
+  return countSold(createAdminClient());
+}
+
+// Mismo conteo para mostrar en /entradas, renovado cada 60 s como mucho.
+export const countSoldTicketsCached = unstable_cache(
+  () => countSold(createAdminClient({ cacheable: true })),
+  ['entradas-vendidas'],
+  { revalidate: 60, tags: ['entradas-vendidas'] }
+);
 
 export async function updateTicket(id: string, patch: Partial<Omit<DbTicket, 'id' | 'code' | 'created_at'>>) {
   const supabase = createAdminClient();

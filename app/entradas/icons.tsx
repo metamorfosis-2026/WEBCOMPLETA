@@ -75,6 +75,26 @@ export function LockIcon(props: IconProps) {
   );
 }
 
+export function QrIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="4" width="6" height="6" rx="1.2" />
+      <rect x="14" y="4" width="6" height="6" rx="1.2" />
+      <rect x="4" y="14" width="6" height="6" rx="1.2" />
+      <path d="M14 14h2.5v2.5H14zM17.5 17.5H20V20h-2.5zM14 19.5V20M20 14v.5" />
+    </Svg>
+  );
+}
+
+export function ChatIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 4.5c4.4 0 8 3 8 6.8s-3.6 6.8-8 6.8c-.9 0-1.8-.1-2.6-.4L5 19.5l1.2-3.4C4.8 14.9 4 13.2 4 11.3 4 7.5 7.6 4.5 12 4.5Z" />
+      <path d="M8.5 11.3h.01M12 11.3h.01M15.5 11.3h.01" strokeWidth={2.2} />
+    </Svg>
+  );
+}
+
 export function ArrowLeftIcon(props: IconProps) {
   return (
     <Svg {...props}>

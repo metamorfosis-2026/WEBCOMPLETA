@@ -29,6 +29,9 @@ export function EntradasShell({ children, wide = false }: { children: React.Reac
               alt="Metamorfosis"
               width={220}
               height={62}
+              // Con sizes el navegador baja la version justa (384 px en un celular
+              // con pantalla 2x) y no la de 640.
+              sizes="(min-width: 640px) 200px, 170px"
               priority
               className="h-auto w-[170px] sm:w-[200px]"
             />
@@ -47,7 +50,8 @@ export function EntradasShell({ children, wide = false }: { children: React.Reac
 
       <div
         className={`relative z-10 mx-auto w-full ${container} ${
-          wide ? 'pb-36 pt-8 sm:pt-12 lg:pb-24 lg:pt-16' : 'pb-16 pt-8 sm:pt-12'
+          // wide en celular: el padding de abajo deja ver todo por encima de la barra fija de pago.
+          wide ? 'pb-32 pt-6 sm:pt-10 lg:pb-24 lg:pt-16' : 'pb-16 pt-8 sm:pt-12'
         }`}
       >
         {children}
