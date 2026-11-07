@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 
 import { startTicketCheckout, type CheckoutError } from '@/app/actions/entradas';
@@ -19,7 +19,8 @@ import {
 import { EDITION_DATE_LABEL, INSTAGRAM_DM_URL } from '@/app/lib/inscripcion';
 import { isValidWhatsAppNumber, prettyPhone, toWhatsAppNumber } from '@/app/lib/phone';
 
-type ErrorCode = CheckoutError;
+// NETWORK / NO_URL los detecta el navegador (no vienen del servidor).
+type ErrorCode = CheckoutError | 'NETWORK' | 'NO_URL';
 
 const ERROR_TEXT: Record<ErrorCode, string> = {
   INVALID: 'Revisá tu nombre y tu email.',
@@ -27,7 +28,14 @@ const ERROR_TEXT: Record<ErrorCode, string> = {
   SOLD_OUT: 'Se agotaron las entradas de esta edición. Escribinos por Instagram y te sumamos a la lista de espera.',
   PAYMENTS_OFF: 'El pago online todavía no está habilitado. Escribinos por Instagram y te pasamos cómo pagar.',
   FAILED: 'No pudimos abrir Mercado Pago. Probá de nuevo en un momento.',
+  RETRY: 'No pudimos procesar el pedido. Esperá unos segundos y volvé a tocar el botón.',
+  NETWORK:
+    'No pudimos conectarnos. Revisá tu conexión y probá de nuevo. Si estás en el navegador de Instagram o Facebook, abrí esta página en tu navegador (menú ··· → Abrir en el navegador).',
+  NO_URL: 'No recibimos el link de Mercado Pago. Probá de nuevo en un momento.',
 };
+
+// Si a los 6 s el navegador sigue en la pagina, mostramos el link a mano.
+const REDIRECT_FALLBACK_MS = 6000;
 
 // text-[16px] es obligatorio: por debajo de eso iOS hace zoom al enfocar.
 const inputClass =
@@ -62,42 +70,81 @@ export function TicketCheckout({
   const [honeypot, setHoneypot] = useState('');
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<ErrorCode | null>(null);
-  const [redirecting, setRedirecting] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [showManualLink, setShowManualLink] = useState(false);
+  // Hasta que React hidrata el boton queda deshabilitado: si no, un toque en
+  // un celular lento hacia un submit nativo que recargaba la pagina.
+  const [hydrated, setHydrated] = useState(false);
+  const mountedAt = useRef(0);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    mountedAt.current = Date.now();
+    setHydrated(true);
+
+    // Safari restaura la pagina desde su cache al volver de Mercado Pago:
+    // sin esto el boton quedaba trabado en "Abriendo Mercado Pago…".
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        setRedirectUrl(null);
+        setShowManualLink(false);
+      }
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, []);
+
+  useEffect(() => {
+    if (!redirectUrl) return;
+    const timer = window.setTimeout(() => setShowManualLink(true), REDIRECT_FALLBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [redirectUrl]);
 
   const waNumber = useMemo(() => toWhatsAppNumber(phone), [phone]);
   const phoneOk = isValidWhatsAppNumber(waNumber);
   const emailOk = !email.trim() || /^\S+@\S+\.\S+$/.test(email.trim());
   const isValid = fullName.trim().length >= 3 && phoneOk && emailOk;
   const firstPayment = plan === 'FULL' ? FULL_PRICE_LABEL : SPLIT_INSTALLMENT_LABEL;
+  const redirecting = Boolean(redirectUrl);
   const busy = isPending || redirecting;
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setTouched(true);
     setError(null);
-    if (!isValid || busy) return;
-    if (honeypot.trim()) return; // bot
+    if (!hydrated || !isValid || busy) return;
 
     startTransition(async () => {
-      const result = await startTicketCheckout({
-        plan,
-        fullName: fullName.trim(),
-        phone: waNumber,
-        email: email.trim(),
-        source,
-      });
-      if (result.ok) {
-        setRedirecting(true);
-        window.location.href = result.url;
-      } else {
-        setError(result.error ?? 'FAILED');
+      try {
+        // El campo oculto va al servidor como senal; nunca cortamos aca en silencio.
+        const result = await startTicketCheckout({
+          plan,
+          fullName: fullName.trim(),
+          phone: waNumber,
+          email: email.trim(),
+          source,
+          hp: honeypot,
+          elapsedMs: Date.now() - mountedAt.current,
+        });
+        if (!result.ok) {
+          setError(result.error ?? 'FAILED');
+          return;
+        }
+        if (!result.url) {
+          setError('NO_URL');
+          return;
+        }
+        setRedirectUrl(result.url);
+        window.location.assign(result.url);
+      } catch (failure) {
+        console.error('[entradas] no se pudo iniciar el pago:', failure);
+        setError('NETWORK');
       }
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form onSubmit={handleSubmit} method="post" noValidate>
       {!compact ? (
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-celeste">Entradas · 7ma edición</p>
@@ -208,13 +255,17 @@ export function TicketCheckout({
           />
         </label>
 
-        {/* Honeypot anti-bots: invisible para personas. */}
+        {/* Anti-bots: invisible, sin label y con un nombre que el autocompletado
+            no reconoce. Si igual se llena, el servidor lo usa solo como senal. */}
         <input
           type="text"
-          name="empresa"
+          name="hp_m7"
           tabIndex={-1}
           autoComplete="off"
           aria-hidden="true"
+          data-1p-ignore="true"
+          data-lpignore="true"
+          data-form-type="other"
           value={honeypot}
           onChange={(e) => setHoneypot(e.target.value)}
           className="pointer-events-none absolute h-0 w-0 opacity-0"
@@ -232,7 +283,10 @@ export function TicketCheckout({
       ) : null}
 
       {error ? (
-        <div className="mt-5 rounded-xl border border-sand/30 bg-sand/[0.08] p-4 text-[15px] leading-relaxed text-sand">
+        <div
+          role="alert"
+          className="mt-5 rounded-xl border border-sand/30 bg-sand/[0.08] p-4 text-[15px] leading-relaxed text-sand"
+        >
           {ERROR_TEXT[error]}
           {error === 'SOLD_OUT' || error === 'PAYMENTS_OFF' ? (
             <a href={INSTAGRAM_DM_URL} target="_blank" rel="noreferrer" className="mt-2 block font-semibold underline">
@@ -244,13 +298,14 @@ export function TicketCheckout({
 
       <button
         type="submit"
-        disabled={busy}
+        disabled={busy || !hydrated}
+        aria-busy={busy || !hydrated}
         className="group relative mt-8 w-full overflow-hidden rounded-2xl bg-gradient-to-br from-white via-celeste to-celeste-deep p-[1px] shadow-[0_16px_40px_-16px_rgba(124,201,236,0.85)] transition duration-300 hover:shadow-[0_20px_50px_-14px_rgba(124,201,236,1)] disabled:opacity-60"
       >
         <span className="relative flex items-center justify-between gap-4 rounded-[15px] bg-celeste px-5 py-3">
-          {busy ? (
+          {busy || !hydrated ? (
             <span className="relative w-full py-2 text-center text-[13px] font-extrabold uppercase tracking-[0.14em] text-night">
-              {redirecting ? 'Abriendo Mercado Pago…' : 'Preparando tu entrada…'}
+              {!hydrated ? 'Cargando…' : redirecting ? 'Abriendo Mercado Pago…' : 'Preparando tu entrada…'}
             </span>
           ) : (
             <>
@@ -272,6 +327,15 @@ export function TicketCheckout({
           )}
         </span>
       </button>
+
+      {redirectUrl && showManualLink ? (
+        <p className="mt-4 text-center text-[14px] leading-relaxed text-ivory/70">
+          ¿No se abrió?{' '}
+          <a href={redirectUrl} className="font-semibold text-celeste underline">
+            Tocá acá para ir a Mercado Pago
+          </a>
+        </p>
+      ) : null}
 
       <p className="mt-5 text-center text-[13px] leading-relaxed text-ivory/40">
         Pagás dentro de Mercado Pago (tarjeta, débito, dinero en cuenta o efectivo). Apenas se acredita te llega tu

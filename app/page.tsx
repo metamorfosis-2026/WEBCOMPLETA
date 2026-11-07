@@ -270,19 +270,33 @@ function Section({
   );
 }
 
+/*
+  Con `href` es un link: antes de que cargue React (celular lento) lleva a esa
+  pagina; ya cargado, hace lo de onClick (por ejemplo, abrir el modal).
+*/
 function PrimaryButton({
   onClick,
+  href,
   children,
   className,
 }: {
   onClick: () => void;
+  href?: string;
   children: React.ReactNode;
   className?: string;
 }) {
+  const Tag = href ? 'a' : 'button';
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <Tag
+      {...(href
+        ? {
+            href,
+            onClick: (event: React.MouseEvent) => {
+              event.preventDefault();
+              onClick();
+            },
+          }
+        : { type: 'button' as const, onClick })}
       className={`group inline-flex min-h-[3.5rem] items-center justify-center gap-2.5 rounded-full bg-celeste px-8 py-4 text-center text-[13px] font-extrabold uppercase leading-tight tracking-[0.1em] text-night shadow-[0_18px_44px_-18px_rgba(124,201,236,0.75)] transition duration-300 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-celeste/60 focus-visible:ring-offset-2 focus-visible:ring-offset-night${
         className ? ' ' + className : ''
       }`}
@@ -291,7 +305,7 @@ function PrimaryButton({
       <span aria-hidden="true" className="transition-transform duration-300 group-hover:translate-x-1">
         →
       </span>
-    </button>
+    </Tag>
   );
 }
 
@@ -589,7 +603,7 @@ export default function Page() {
                   </p>
 
                   <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <PrimaryButton onClick={openSignup}>Comprar entrada</PrimaryButton>
+                    <PrimaryButton href="/entradas" onClick={openSignup}>Comprar entrada</PrimaryButton>
                     <GhostButton onClick={() => scrollToSection('fase-1')}>Cómo es la Fase 1</GhostButton>
                   </div>
 
@@ -865,7 +879,7 @@ export default function Page() {
                   </p>
                 </div>
 
-                <PrimaryButton onClick={openSignup} className="mt-10 w-full">
+                <PrimaryButton href="/entradas" onClick={openSignup} className="mt-10 w-full">
                   Comprar mi entrada
                 </PrimaryButton>
 
@@ -1010,7 +1024,7 @@ export default function Page() {
                   <em>va a ser un placer acompañarte.</em>
                 </p>
                 <div className="mt-11 flex justify-center">
-                  <PrimaryButton onClick={openSignup}>{CTA_LABEL}</PrimaryButton>
+                  <PrimaryButton href="/entradas" onClick={openSignup}>{CTA_LABEL}</PrimaryButton>
                 </div>
                 <p className="mt-7 text-[11px] uppercase tracking-[0.18em] text-ivory/40">
                   {EDITION_DATE_SHORT} · {EDITION_PLACE} · Cupos reducidos

@@ -10,7 +10,7 @@ import {
 
 /*
   Barra fija al pie. Siempre visible (sobre todo en celular): es el camino
-  mas corto entre "estoy leyendo" y "dejo mis datos".
+  mas corto entre "estoy leyendo" y "compro mi entrada".
 */
 export function StickyInscripcionBar({ onOpen }: { onOpen: () => void }) {
   return (
@@ -26,9 +26,14 @@ export function StickyInscripcionBar({ onOpen }: { onOpen: () => void }) {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={onOpen}
+        {/* Link a /entradas: funciona aunque React todavia no haya cargado;
+            ya cargado, abre el modal de compra. */}
+        <a
+          href="/entradas"
+          onClick={(event) => {
+            event.preventDefault();
+            onOpen();
+          }}
           aria-label={CTA_LABEL}
           className="group relative w-full flex-1 overflow-hidden rounded-2xl bg-gradient-to-br from-white via-celeste to-celeste-deep p-[1px] shadow-[0_16px_40px_-16px_rgba(124,201,236,0.85)] transition duration-300 hover:shadow-[0_20px_50px_-14px_rgba(124,201,236,1)] lg:w-auto lg:flex-none"
         >
@@ -56,7 +61,7 @@ export function StickyInscripcionBar({ onOpen }: { onOpen: () => void }) {
               →
             </span>
           </span>
-        </button>
+        </a>
       </div>
     </div>
   );

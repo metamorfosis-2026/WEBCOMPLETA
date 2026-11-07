@@ -17,11 +17,17 @@ const checkoutSchema = z.object({
   phone: z.string().trim().min(6).max(40),
   email: z.string().trim().max(160).email().optional().or(z.literal('')),
   source: z.string().trim().max(60).optional().or(z.literal('')),
+  // Anti-bots: campo oculto (hp) y cuanto tardo en llenar el formulario.
+  hp: z.string().max(300).optional(),
+  elapsedMs: z.number().nonnegative().optional(),
 });
+
+// Un humano no completa nombre + WhatsApp en menos de esto.
+const MIN_FILL_MS = 3000;
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 
-export type CheckoutError = 'INVALID' | 'PHONE' | 'SOLD_OUT' | 'PAYMENTS_OFF' | 'FAILED';
+export type CheckoutError = 'INVALID' | 'PHONE' | 'SOLD_OUT' | 'PAYMENTS_OFF' | 'FAILED' | 'RETRY';
 
 export type CheckoutResult =
   | { ok: true; url: string; code: string; error?: undefined }
@@ -42,6 +48,19 @@ function requestOrigin() {
 export async function startTicketCheckout(input: CheckoutInput): Promise<CheckoutResult> {
   const parsed = checkoutSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: 'INVALID' };
+
+  /*
+    El campo oculto solo es una senal: Safari, Samsung Internet, Firefox y los
+    gestores de contrasenas a veces lo autocompletan aunque diga
+    autocomplete=off. Solo frenamos si ademas se lleno en menos de 3 s (un
+    bot), y aun asi devolvemos un error visible para que una persona pueda
+    reintentar.
+  */
+  const honeypot = parsed.data.hp?.trim() ?? '';
+  if (honeypot && (parsed.data.elapsedMs ?? 0) < MIN_FILL_MS) {
+    console.warn('[entradas] posible bot: campo oculto lleno y formulario completado en', parsed.data.elapsedMs, 'ms');
+    return { ok: false, error: 'RETRY' };
+  }
 
   const phone = toWhatsAppNumber(parsed.data.phone);
   if (!isValidWhatsAppNumber(phone)) return { ok: false, error: 'PHONE' };
