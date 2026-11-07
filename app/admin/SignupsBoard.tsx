@@ -3,6 +3,9 @@
 import { useMemo, useState } from 'react';
 
 import { SIGNUP_STATUS_OPTIONS, normalizeSignupStatus, signupStatusLabel, type SignupStatus } from '@/app/lib/metamorfosis';
+import { prettyPhone, toWhatsAppNumber } from '@/app/lib/phone';
+
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://metamorfosis.vip').replace(/\/+$/, '');
 
 import { updateSignupAction } from './actions';
 import { DeleteSignupInline } from './DeleteSignupInline';
@@ -52,29 +55,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat('es-AR', {
   minute: '2-digit',
   timeZone: 'America/Argentina/Buenos_Aires',
 });
-
-/*
-  La gente escribe el WhatsApp de mil formas (11..., 54 11..., 549 11...).
-  wa.me necesita el formato internacional de celular argentino: 549 + area + numero.
-*/
-function toWhatsAppNumber(raw: string) {
-  let digits = raw.replace(/\D+/g, '');
-  if (digits.startsWith('549')) return digits;
-  if (digits.startsWith('54')) return `549${digits.slice(2)}`;
-  if (digits.startsWith('0')) digits = digits.slice(1);
-  if (digits.length === 10) return `549${digits}`;
-  return digits;
-}
-
-function prettyPhone(raw: string) {
-  const wa = toWhatsAppNumber(raw);
-  // 549 11 6445 0430 (Buenos Aires: area de 2 digitos)
-  const ba = wa.match(/^549(11)(\d{4})(\d{4})$/);
-  if (ba) return `+54 9 ${ba[1]} ${ba[2]}-${ba[3]}`;
-  const other = wa.match(/^549(\d{3,4})(\d{6,7})$/);
-  if (other) return `+54 9 ${other[1]} ${other[2]}`;
-  return `+${wa}`;
-}
 
 function instagramUrl(social: string) {
   const handle = social.trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/.*$/, '');
@@ -279,7 +259,8 @@ function SignupRow({ signup }: { signup: BoardSignup }) {
   const name = titleCase(signup.fullName);
   const firstName = name.split(' ')[0] ?? '';
   const waNumber = toWhatsAppNumber(signup.phone);
-  const waText = `Hola ${firstName}! Te escribo de Metamorfosis por la lista de la 7ma edición de noviembre.`;
+  // Ya hay fecha y venta de entradas: el mensaje lleva directo al link de compra.
+  const waText = `Hola ${firstName}! Te escribo de Metamorfosis por la lista de la 7ma edición. Ya confirmamos la fecha: sábado 28 y domingo 29 de noviembre. Podés sacar tu entrada acá: ${SITE_URL}/entradas`;
   const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(waText)}`;
   const igUrl = signup.social ? instagramUrl(signup.social) : null;
   const created = new Date(signup.createdAt);

@@ -13,11 +13,23 @@ import {
 } from '@/app/lib/metamorfosis';
 import { EDITION_DATE_LABEL, EDITION_NAME, WAITLIST_MAX, WAITLIST_MIN } from '@/app/lib/inscripcion';
 import { getAdminData } from '@/app/lib/supabase/views';
+import { TICKET_CAPACITY } from '@/app/lib/entradas';
+import { hasMercadoPago } from '@/app/lib/mercadopago';
+import { getSiteUrl } from '@/app/lib/site';
+import {
+  listRecentWhatsAppMessages,
+  listTicketCheckins,
+  listTicketPayments,
+  listTickets,
+} from '@/app/lib/supabase/tickets';
+import { cloudTemplatesEnabled, getWhatsAppProvider } from '@/app/lib/whatsapp';
+import { hasAiBot } from '@/app/lib/whatsapp-bot';
 import { ActionNotice } from './ActionNotice';
 import { FormSubmitButton } from './FormSubmitButton';
 import { GodFormModal } from './GodFormModal';
 import { PersonalTasksModal } from './PersonalTasksModal';
 import { SignupsBoard } from './SignupsBoard';
+import { TicketsBoard, type BoardTicket, type IntegrationStatus } from './TicketsBoard';
 import { UserDetailModal } from './UserDetailModal';
 import {
   assignGodToUser,
@@ -48,6 +60,7 @@ type TreeNode = {
 
 type AdminTab =
   | 'overview'
+  | 'entradas'
   | 'signups'
   | 'finance'
   | 'community'
@@ -225,6 +238,53 @@ function SectionShell({
   );
 }
 
+// Entradas de la 7ma edicion. Si falta la tabla (supabase/entradas.sql) no
+// tiramos abajo el panel: mostramos el error en la pestana.
+async function loadTicketsBoard(): Promise<{ ok: true; tickets: BoardTicket[] } | { ok: false; error: string }> {
+  try {
+    const [tickets, payments, checkins, messages] = await Promise.all([
+      listTickets(),
+      listTicketPayments(),
+      listTicketCheckins(),
+      listRecentWhatsAppMessages(1000),
+    ]);
+
+    const lastMessageByTicket = new Map<string, (typeof messages)[number]>();
+    for (const message of messages) {
+      if (message.direction !== 'OUT' || !message.ticketId) continue;
+      if (!lastMessageByTicket.has(message.ticketId)) lastMessageByTicket.set(message.ticketId, message);
+    }
+
+    return {
+      ok: true,
+      tickets: tickets.map((ticket) => {
+        const last = lastMessageByTicket.get(ticket.id);
+        return {
+          id: ticket.id,
+          code: ticket.code,
+          fullName: ticket.fullName,
+          phone: ticket.phone,
+          email: ticket.email,
+          plan: ticket.plan,
+          totalCents: ticket.totalCents,
+          paidCents: ticket.paidCents,
+          status: ticket.status,
+          source: ticket.source,
+          notes: ticket.notes,
+          createdAt: ticket.createdAt,
+          payments: payments.filter((payment) => payment.ticketId === ticket.id),
+          checkins: checkins
+            .filter((checkin) => checkin.ticketId === ticket.id)
+            .map((checkin) => ({ id: checkin.id, createdAt: checkin.createdAt })),
+          lastMessage: last ? { kind: last.kind, ok: last.ok, error: last.error, createdAt: last.createdAt } : null,
+        };
+      }),
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
@@ -250,6 +310,7 @@ export default async function AdminPage({
   const tabParam = (searchParams?.tab ?? 'overview').toString() as AdminTab;
   const validTabs: AdminTab[] = [
     'overview',
+    'entradas',
     'signups',
     'finance',
     'community',
@@ -262,8 +323,17 @@ export default async function AdminPage({
   const activeTab: AdminTab = validTabs.includes(tabParam) ? tabParam : 'overview';
   const notice = (searchParams?.notice ?? '').toString().trim();
 
-  const { users, editions, giftInvitations, weeklyTasks, newsPosts, gods, signups } =
-    await getAdminData();
+  const [{ users, editions, giftInvitations, weeklyTasks, newsPosts, gods, signups }, ticketsBoard] =
+    await Promise.all([getAdminData(), activeTab === 'entradas' ? loadTicketsBoard() : Promise.resolve(null)]);
+
+  const integrations: IntegrationStatus = {
+    mercadoPago: hasMercadoPago(),
+    whatsapp: getWhatsAppProvider(),
+    cloudTemplates: cloudTemplatesEnabled(),
+    ai: hasAiBot(),
+    cron: Boolean(process.env.CRON_SECRET?.trim()),
+    siteUrl: getSiteUrl(),
+  };
 
   const selectedEdition =
     editions.find((edition) => edition.slug === searchParams?.edition) ??
@@ -361,6 +431,7 @@ export default async function AdminPage({
 
   const tabs: { id: AdminTab; label: string; help: string }[] = [
     { id: 'overview', label: 'Resumen', help: 'Vista ejecutiva por edicion y fase.' },
+    { id: 'entradas', label: 'Entradas', help: 'Ventas por Mercado Pago, QR, WhatsApp e ingresos en la puerta.' },
     { id: 'signups', label: 'Inscriptos', help: 'Gente que dejo sus datos en la web.' },
     { id: 'finance', label: 'Finanzas', help: 'Operacion diaria de asignaciones y pagos.' },
     { id: 'community', label: 'Comunidad', help: 'Arbol, estados y referencias.' },
@@ -692,6 +763,30 @@ export default async function AdminPage({
                 )}
               </SectionShell>
             </div>
+          </div>
+        ) : null}
+
+        {activeTab === 'entradas' ? (
+          <div className="mt-8 grid gap-8">
+            <SectionShell
+              title="Entradas · 7ma edición"
+              subtitle="Quién compró por la web, cuánto pagó, el WhatsApp que se le mandó y quién ya entró. En la puerta escaneá el QR con el celular (logueado como admin) para registrar el ingreso."
+            >
+              {ticketsBoard?.ok ? (
+                <TicketsBoard tickets={ticketsBoard.tickets} capacity={TICKET_CAPACITY} integrations={integrations} />
+              ) : (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-5 text-sm text-amber-100">
+                  <p className="font-semibold">No se pudieron cargar las entradas.</p>
+                  <p className="mt-2 text-amber-100/80">
+                    Si es la primera vez, falta crear las tablas: en Supabase abrí el SQL Editor y corré el archivo{' '}
+                    <code className="rounded bg-black/30 px-1.5 py-0.5">supabase/entradas.sql</code>.
+                  </p>
+                  {ticketsBoard && !ticketsBoard.ok ? (
+                    <p className="mt-2 text-xs text-amber-100/60">Detalle: {ticketsBoard.error}</p>
+                  ) : null}
+                </div>
+              )}
+            </SectionShell>
           </div>
         ) : null}
 

@@ -15,7 +15,7 @@
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { Reveal } from './components/Reveal';
-import { SignupForm, SignupModal } from './components/SignupForm';
+import { TicketCheckout, TicketCheckoutModal } from './components/TicketCheckout';
 import { StickyInscripcionBar } from './components/StickyInscripcionBar';
 import { Faq } from './components/Faq';
 import { FloatingWhatsApp } from './components/FloatingWhatsApp';
@@ -29,14 +29,16 @@ import {
   EDITION_DATE_SHORT,
   EDITION_NAME,
   EDITION_PLACE,
-  FASE1_PRICE_LABEL,
-  FASE1_PRICE_TRANSFER_LABEL,
-  FASE1_RESERVE_LABEL,
   FASE1_SCHEDULE,
   WAITLIST_MAX,
-  WAITLIST_MIN,
-  FASE1_TRANSFER_DISCOUNT_LABEL,
 } from './lib/inscripcion';
+import {
+  BALANCE_DEADLINE_LABEL,
+  EVENT_DATE_LABEL,
+  FULL_PRICE_LABEL,
+  SPLIT_INSTALLMENT_LABEL,
+  SPLIT_TOTAL_LABEL,
+} from './lib/entradas';
 
 function envFlag(value: string | undefined, fallback = false) {
   if (!value) return fallback;
@@ -395,11 +397,11 @@ export default function Page() {
   const faqItems = [
     {
       question: '¿Cuándo es la 7ma edición?',
-      answer: `La Fase 1 es un fin de semana de noviembre de 2026 (${FASE1_SCHEDULE.toLowerCase()}), en ${EDITION_PLACE}. Como es un taller muy a medida, confirmamos el fin de semana exacto cuando se completen ${WAITLIST_MIN} lugares. Sumate a la lista y te avisamos primero.`,
+      answer: `La Fase 1 es el ${EVENT_DATE_LABEL.toLowerCase()} de 2026 (${FASE1_SCHEDULE.toLowerCase()}), en ${EDITION_PLACE}. La dirección exacta te la mandamos por WhatsApp junto con tu entrada.`,
     },
     {
       question: '¿Cuánto sale la Fase 1?',
-      answer: `El valor de la Fase 1 es de ${FASE1_PRICE_LABEL}. Abonando por transferencia tenés un ${FASE1_TRANSFER_DISCOUNT_LABEL} de descuento y pagás ${FASE1_PRICE_TRANSFER_LABEL}. También podés reservar tu lugar abonando el ${FASE1_RESERVE_LABEL} y pagar el resto en partes (en ese caso no se aplica el ${FASE1_TRANSFER_DISCOUNT_LABEL} de descuento).`,
+      answer: `La entrada sale ${FULL_PRICE_LABEL} en un solo pago. Si preferís dividirlo, son ${SPLIT_TOTAL_LABEL} en dos pagos de ${SPLIT_INSTALLMENT_LABEL}: el primero reserva tu lugar y el segundo lo pagás ${BALANCE_DEADLINE_LABEL}. Todo se paga desde esta web con Mercado Pago.`,
     },
     {
       question: '¿Qué es la Fase 1?',
@@ -416,14 +418,14 @@ export default function Page() {
         'No. Es un proceso vivencial con psicología aplicada y herramientas prácticas. No reemplaza un proceso terapéutico individual, pero puede complementarlo.',
     },
     {
-      question: '¿Cómo sé que es confiable?',
+      question: '¿Cómo pago y cómo recibo mi entrada?',
       answer:
-        'Porque el primer paso es hablar por WhatsApp y despejar dudas. Esta web no pide pagos ni datos bancarios: solo tu nombre y tu contacto para poder escribirte.',
+        'Elegís si pagás en uno o en dos pagos, dejás tu nombre y tu WhatsApp, y pagás dentro de Mercado Pago (tarjeta, débito, dinero en cuenta o efectivo). Esta web nunca ve los datos de tu tarjeta. Apenas se acredita el pago te llega tu entrada con un QR por WhatsApp: ese QR se escanea en la puerta.',
     },
     {
       question: '¿Hay cupos?',
       answer:
-        `Sí. El grupo es de hasta ${WAITLIST_MAX} personas y necesitamos un mínimo de ${WAITLIST_MIN} para confirmar la fecha. Anotarte en la lista no tiene compromiso: cuando confirmamos el fin de semana te escribimos para reservar. Si ya se completaron los lugares, quedás en la lista de reserva.`,
+        `Sí. El grupo es de hasta ${WAITLIST_MAX} personas y el lugar queda tuyo cuando se acredita tu pago (o el primero de los dos). Cuando se completan los lugares, la venta se cierra.`,
     },
     {
       question: '¿Puedo participar si nunca hice un taller así?',
@@ -587,7 +589,7 @@ export default function Page() {
                   </p>
 
                   <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <PrimaryButton onClick={openSignup}>Inscribite</PrimaryButton>
+                    <PrimaryButton onClick={openSignup}>Comprar entrada</PrimaryButton>
                     <GhostButton onClick={() => scrollToSection('fase-1')}>Cómo es la Fase 1</GhostButton>
                   </div>
 
@@ -804,7 +806,7 @@ export default function Page() {
               {[
                 ['Cuándo', FASE1_SCHEDULE, 'ambos días'],
                 ['Dónde', 'Presencial', EDITION_PLACE],
-                ['Fecha', EDITION_DATE_LABEL, `se confirma al llegar a ${WAITLIST_MIN} inscriptos`],
+                ['Fecha', EDITION_DATE_LABEL, `hasta ${WAITLIST_MAX} personas`],
               ].map(([term, main, detail]) => (
                 <div key={term} className="px-7 py-7 sm:px-8 sm:py-9">
                   <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-celeste">{term}</p>
@@ -841,39 +843,35 @@ export default function Page() {
             <div className="mx-auto mt-14 max-w-xl sm:mt-16">
               <div className="surface surface-accent p-7 text-center sm:p-10">
                 <div className="flex justify-center">
-                  <MetaLabel>Valor de la Fase 1</MetaLabel>
+                  <MetaLabel>Tu entrada a la Fase 1</MetaLabel>
                 </div>
 
-                <p className="mt-8 text-[13px] uppercase tracking-[0.16em] text-ivory/50">
-                  Pagando por transferencia
-                </p>
+                <p className="mt-8 text-[13px] uppercase tracking-[0.16em] text-ivory/50">En un solo pago</p>
 
                 <p className="numeric mt-4 text-[3.5rem] font-light leading-none text-white sm:text-[4.5rem]">
-                  {FASE1_PRICE_TRANSFER_LABEL}
+                  {FULL_PRICE_LABEL}
                 </p>
 
-                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                  <span className="text-[16px] text-ivory/40 line-through">{FASE1_PRICE_LABEL}</span>
-                  <span className="rounded-full bg-celeste px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-night">
-                    {FASE1_TRANSFER_DISCOUNT_LABEL} off
-                  </span>
-                </div>
+                <p className="mt-5 text-[15px] text-ivory/50">{EVENT_DATE_LABEL}</p>
 
                 <div className="mx-auto mt-10 max-w-md border-t border-ivory/12 pt-9">
-                  <p className="display-sm text-[1.2rem] text-ivory">¿No podés pagarlo todo junto?</p>
+                  <p className="display-sm text-[1.2rem] text-ivory">¿Preferís pagarlo en dos partes?</p>
                   <p className="mt-4 text-[16px] leading-relaxed text-ivory/70">
-                    Reservá tu lugar abonando el{' '}
-                    <span className="font-semibold text-celeste">{FASE1_RESERVE_LABEL}</span> y pagá el
-                    resto en partes.
+                    Son <span className="font-semibold text-celeste">2 pagos de {SPLIT_INSTALLMENT_LABEL}</span>: el
+                    primero reserva tu lugar y el segundo lo pagás {BALANCE_DEADLINE_LABEL}.
                   </p>
                   <p className="mt-4 text-[13px] leading-relaxed text-ivory/40">
-                    Esta modalidad no incluye el descuento del {FASE1_TRANSFER_DISCOUNT_LABEL}.
+                    Total en dos pagos: {SPLIT_TOTAL_LABEL}.
                   </p>
                 </div>
 
                 <PrimaryButton onClick={openSignup} className="mt-10 w-full">
-                  Reservar mi lugar
+                  Comprar mi entrada
                 </PrimaryButton>
+
+                <p className="mt-5 text-[13px] leading-relaxed text-ivory/40">
+                  Pagás con Mercado Pago y tu entrada con QR te llega por WhatsApp.
+                </p>
               </div>
             </div>
           </Reveal>
@@ -888,7 +886,7 @@ export default function Page() {
           <div className="relative z-[1] mx-auto w-full max-w-xl px-6 sm:px-8">
             <Reveal>
               <div className="surface surface-accent p-8 sm:p-10">
-                <SignupForm source="seccion-inscripcion" />
+                <TicketCheckout source="seccion-inscripcion" />
               </div>
             </Reveal>
           </div>
@@ -1038,7 +1036,7 @@ export default function Page() {
       </div>
 
       <StickyInscripcionBar onOpen={openSignup} />
-      <SignupModal open={signupOpen} onClose={() => setSignupOpen(false)} />
+      <TicketCheckoutModal open={signupOpen} onClose={() => setSignupOpen(false)} />
     </main>
   );
 }

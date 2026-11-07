@@ -1,0 +1,151 @@
+/*
+  Textos de WhatsApp de las entradas. Se usan para el envio automatico y
+  tambien en el admin (boton "mandar a mano" por wa.me), asi que no importan
+  nada de servidor.
+
+  Cada mensaje trae su plantilla equivalente para WhatsApp Cloud API: los
+  nombres y el orden de los parametros tienen que coincidir con las
+  plantillas cargadas en Meta (ver docs/entradas-setup.md).
+*/
+
+import {
+  BALANCE_DEADLINE_LABEL,
+  EVENT_ADDRESS,
+  EVENT_DATE_LABEL,
+  EVENT_HOURS_LABEL,
+  EVENT_PLACE,
+  firstName,
+  formatPesos,
+} from './entradas';
+import type { OutgoingWhatsApp } from './whatsapp';
+
+export type MessageKind = 'CONFIRMACION' | 'SENA' | 'SALDO' | 'VISPERA' | 'PENDIENTE' | 'BOT' | 'IA';
+
+export type TicketForMessage = {
+  code: string;
+  fullName: string;
+  totalCents: number;
+  paidCents: number;
+  status: string;
+};
+
+export type TicketLinks = { ticket: string; pay: string; image: string };
+
+const PLACE_LINE = EVENT_ADDRESS ? `📍 ${EVENT_ADDRESS}` : `📍 ${EVENT_PLACE} (te pasamos la dirección exacta por acá)`;
+
+function hello(ticket: TicketForMessage) {
+  const name = firstName(ticket.fullName);
+  return name ? `¡Hola ${name}!` : '¡Hola!';
+}
+
+export function confirmationMessage(ticket: TicketForMessage, links: TicketLinks): OutgoingWhatsApp {
+  const text = [
+    `${hello(ticket)} 🦋`,
+    'Tu entrada para *Metamorfosis 7ma Edición* está confirmada ✅',
+    '',
+    `📅 ${EVENT_DATE_LABEL}`,
+    `🕥 ${EVENT_HOURS_LABEL} (los dos días)`,
+    PLACE_LINE,
+    '',
+    `🎟️ Código: *${ticket.code}*`,
+    `Tu entrada con QR: ${links.ticket}`,
+    '',
+    'Guardá este mensaje: el QR se escanea en la puerta.',
+  ].join('\n');
+
+  return {
+    text,
+    imageUrl: links.image,
+    template: { name: 'entrada_confirmada', params: [firstName(ticket.fullName) || 'hola', ticket.code, links.ticket] },
+  };
+}
+
+export function depositMessage(ticket: TicketForMessage, links: TicketLinks): OutgoingWhatsApp {
+  const balance = formatPesos(ticket.totalCents - ticket.paidCents);
+  const paid = formatPesos(ticket.paidCents);
+  const text = [
+    `${hello(ticket)} 🦋`,
+    `Recibimos tu primer pago de *${paid}* para *Metamorfosis 7ma Edición*. Tu lugar ya está reservado ✅`,
+    '',
+    `Te queda el saldo de *${balance}*, que podés pagar ${BALANCE_DEADLINE_LABEL} acá:`,
+    links.pay,
+    '',
+    `📅 ${EVENT_DATE_LABEL}`,
+    `🕥 ${EVENT_HOURS_LABEL} (los dos días)`,
+    PLACE_LINE,
+    '',
+    `🎟️ Código: *${ticket.code}*`,
+    `Tu entrada con QR: ${links.ticket}`,
+  ].join('\n');
+
+  return {
+    text,
+    imageUrl: links.image,
+    template: {
+      name: 'sena_recibida',
+      params: [firstName(ticket.fullName) || 'hola', paid, balance, links.pay, links.ticket],
+    },
+  };
+}
+
+export function balanceReminderMessage(ticket: TicketForMessage, links: TicketLinks): OutgoingWhatsApp {
+  const balance = formatPesos(ticket.totalCents - ticket.paidCents);
+  const text = [
+    `${hello(ticket)} 🦋`,
+    `Te recordamos que te queda el saldo de *${balance}* de tu entrada a *Metamorfosis 7ma Edición* (${EVENT_DATE_LABEL.toLowerCase()}).`,
+    '',
+    `Lo podés pagar ${BALANCE_DEADLINE_LABEL} acá:`,
+    links.pay,
+    '',
+    'Cualquier duda, respondé este mensaje.',
+  ].join('\n');
+
+  return {
+    text,
+    template: { name: 'recordatorio_saldo', params: [firstName(ticket.fullName) || 'hola', balance, links.pay] },
+  };
+}
+
+export function eveMessage(ticket: TicketForMessage, links: TicketLinks): OutgoingWhatsApp {
+  const owes = ticket.paidCents < ticket.totalCents;
+  const text = [
+    `${hello(ticket)} 🦋 ¡Mañana arrancamos *Metamorfosis 7ma Edición*!`,
+    '',
+    `🕥 ${EVENT_HOURS_LABEL} (sábado y domingo)`,
+    PLACE_LINE,
+    '',
+    `Tené a mano tu QR para la entrada: ${links.ticket}`,
+    owes ? `\nTodavía te queda el saldo de *${formatPesos(ticket.totalCents - ticket.paidCents)}*. Pagalo acá así entrás directo: ${links.pay}` : null,
+    '',
+    'Venís con ropa cómoda. ¡Te esperamos!',
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
+
+  return {
+    text,
+    imageUrl: links.image,
+    template: { name: 'vispera_taller', params: [firstName(ticket.fullName) || 'hola', links.ticket] },
+  };
+}
+
+export function pendingPaymentMessage(ticket: TicketForMessage, links: TicketLinks): OutgoingWhatsApp {
+  const text = [
+    `${hello(ticket)} 🦋`,
+    `Tenés una entrada a *Metamorfosis 7ma Edición* iniciada pero todavía no vemos el pago acreditado.`,
+    '',
+    'Podés completarlo acá:',
+    links.pay,
+    '',
+    'Si ya pagaste en efectivo (Rapipago / Pago Fácil) puede tardar unas horas en acreditarse: te avisamos por acá apenas entre.',
+  ].join('\n');
+  return { text };
+}
+
+// Mensaje que corresponde al estado actual de la entrada.
+export function messageForTicket(ticket: TicketForMessage, links: TicketLinks): { kind: MessageKind; message: OutgoingWhatsApp } | null {
+  if (ticket.status === 'PAGADO') return { kind: 'CONFIRMACION', message: confirmationMessage(ticket, links) };
+  if (ticket.status === 'SENADO') return { kind: 'SENA', message: depositMessage(ticket, links) };
+  if (ticket.status === 'PENDIENTE') return { kind: 'PENDIENTE', message: pendingPaymentMessage(ticket, links) };
+  return null;
+}
