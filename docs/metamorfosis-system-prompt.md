@@ -63,9 +63,9 @@ Metodología:
 - marco teórico (psicología aplicada)
 - seguimiento posterior
 
-Valor:
-- $100.000
-- Único pago inicial
+Valor (7ma edición, ver sección 11):
+- $72.000 en un solo pago, o 2 pagos de $60.000 ($120.000 en total)
+- Se paga al inscribirse (el saldo del plan en 2 pagos, antes del taller)
 - No incluye compromiso con fases siguientes
 
 Narrativa recomendada:
@@ -153,7 +153,7 @@ El WhatsApp lo atiende un asistente automático (`app/lib/whatsapp-bot.ts`). Su 
 
 Datos vigentes de la 7ma edición (actualizan el valor de la sección 4):
 - Sábado 28 y domingo 29 de noviembre, de 11 a 17 hs, en Zona Oeste. La dirección exacta se envía al confirmar.
-- Pago único de $72.000, o 2 pagos de $50.000 ($100.000 en total). El primero reserva el lugar y el segundo se paga antes del sábado 28.
+- Pago único de $72.000, o 2 pagos de $60.000 ($120.000 en total). El primero reserva el lugar y el segundo se paga antes del sábado 28. Pagando todo junto se ahorra $48.000.
 - Cupo de 50 personas.
 
 ### Primer mensaje

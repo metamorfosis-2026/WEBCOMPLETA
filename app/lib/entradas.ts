@@ -4,8 +4,12 @@
 
   Dos formas de pago:
   - FULL: un solo pago de $72.000.
-  - SPLIT: $100.000 en dos pagos de $50.000 (la mitad ahora para reservar el
-    lugar y la otra mitad antes del taller).
+  - SPLIT: $120.000 en dos pagos de $60.000 (el primero reserva el lugar y el
+    saldo se paga antes del sabado 28).
+
+  Cada entrada guarda su total. Si cambian los precios:
+  - la que no tiene ningun pago se cobra con el precio nuevo (repricedTotal);
+  - la que ya pago algo conserva el precio con el que pago (totalForFirstPayment).
 */
 
 import { EDITION_NAME, EDITION_PLACE, FASE1_SCHEDULE, WAITLIST_MAX } from './inscripcion';
@@ -23,8 +27,12 @@ export type TicketPlanInfo = {
 
 export const TICKET_PLANS: Record<TicketPlan, TicketPlanInfo> = {
   FULL: { id: 'FULL', label: 'Pago único', totalCents: 7_200_000, installmentsCents: [7_200_000] },
-  SPLIT: { id: 'SPLIT', label: 'En 2 pagos', totalCents: 10_000_000, installmentsCents: [5_000_000, 5_000_000] },
+  SPLIT: { id: 'SPLIT', label: 'En 2 pagos', totalCents: 12_000_000, installmentsCents: [6_000_000, 6_000_000] },
 };
+
+// Precios anteriores del plan en 2 pagos (primer pago -> total). Hasta el
+// 7/11/2026 eran 2 x $50.000 = $100.000.
+const PREVIOUS_SPLIT_PRICES = [{ firstCents: 5_000_000, totalCents: 10_000_000 }];
 
 export const TICKET_CAPACITY = WAITLIST_MAX;
 export const TICKET_CODE_PREFIX = 'M7';
@@ -59,6 +67,8 @@ export function formatPesos(cents: number) {
 export const FULL_PRICE_LABEL = formatPesos(TICKET_PLANS.FULL.totalCents);
 export const SPLIT_TOTAL_LABEL = formatPesos(TICKET_PLANS.SPLIT.totalCents);
 export const SPLIT_INSTALLMENT_LABEL = formatPesos(TICKET_PLANS.SPLIT.installmentsCents[0]);
+// Lo que se ahorra pagando todo junto frente al plan en 2 pagos.
+export const FULL_SAVINGS_LABEL = formatPesos(TICKET_PLANS.SPLIT.totalCents - TICKET_PLANS.FULL.totalCents);
 
 export function computeTicketStatus(totalCents: number, paidCents: number, cancelled = false): TicketStatus {
   if (cancelled) return 'CANCELADO';
@@ -68,11 +78,33 @@ export function computeTicketStatus(totalCents: number, paidCents: number, cance
 }
 
 // Que pago sigue para una entrada: el primero (o unico) o el saldo.
+// El primero sale del total de la entrada (la mitad en el plan en 2 pagos), asi
+// una que conserva el precio anterior sigue cobrando ese precio.
 export function nextInstallment(ticket: { plan: TicketPlan; totalCents: number; paidCents: number; status: string }) {
   if (ticket.status === 'CANCELADO' || ticket.paidCents >= ticket.totalCents) return null;
   const plan = TICKET_PLANS[ticket.plan];
-  if (ticket.paidCents <= 0) return { number: 1, amountCents: plan.installmentsCents[0] };
+  if (ticket.paidCents <= 0) {
+    const share = plan.installmentsCents[0] / plan.totalCents;
+    return { number: 1, amountCents: Math.round(ticket.totalCents * share) };
+  }
   return { number: 2, amountCents: ticket.totalCents - ticket.paidCents };
+}
+
+// Entrada pendiente y sin pagos acreditados con un total distinto al precio de
+// hoy: devuelve el total nuevo (null si no hay que cambiar nada). Quien la usa
+// chequea ademas que no tenga pagos en proceso (por ejemplo, un cupon de Rapipago).
+export function repricedTotal(ticket: { plan: TicketPlan; totalCents: number; paidCents: number; status: string }) {
+  const current = TICKET_PLANS[ticket.plan].totalCents;
+  if (ticket.status !== 'PENDIENTE' || ticket.paidCents > 0 || ticket.totalCents === current) return null;
+  return current;
+}
+
+// Total de una entrada al acreditarse su primer pago de Mercado Pago. Si el pago
+// salio de un link armado con el precio anterior del plan en 2 pagos, la entrada
+// conserva ese precio; si no, queda `totalCents`.
+export function totalForFirstPayment(plan: TicketPlan, firstPaymentCents: number, totalCents: number) {
+  if (plan !== 'SPLIT') return totalCents;
+  return PREVIOUS_SPLIT_PRICES.find((price) => price.firstCents === firstPaymentCents)?.totalCents ?? totalCents;
 }
 
 export function ticketStatusLabel(status: string) {

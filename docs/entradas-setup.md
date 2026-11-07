@@ -3,9 +3,11 @@
 Sábado 28 y domingo 29 de noviembre · de 11 a 17 hs · hasta 50 lugares.
 
 - **Pago único:** $72.000
-- **En 2 pagos:** $100.000 (2 × $50.000). El primero reserva el lugar y el segundo se paga antes del sábado 28.
+- **En 2 pagos:** $120.000 (2 × $60.000). El primero ($60.000) reserva el lugar y el saldo ($60.000) se paga antes del sábado 28. Pagando todo junto se ahorra $48.000.
 
 Precios y fechas: `app/lib/entradas.ts`. Todo lo demás (web, WhatsApp, Mercado Pago, admin) los toma de ahí.
+
+Si cambian los precios, cada entrada conserva el total con el que se pagó: una entrada que ya tiene un pago (o paga un link armado antes del cambio) mantiene su precio original, y una que no tiene ningún pago se cobra con el precio nuevo. Hasta el 7/11/2026 el plan en 2 pagos era de $100.000 (2 × $50.000).
 
 ## Cómo funciona
 
@@ -118,7 +120,7 @@ Las variables que empiezan con `NEXT_PUBLIC_` recién se aplican con un nuevo de
 - Iniciá sesión en `metamorfosis.vip/login` con una cuenta admin, en el celular que va a escanear.
 - Escaneá el QR con la cámara. Se abre la entrada en **modo puerta**:
   - **Verde, "Puede pasar":** tocá **Registrar ingreso**.
-  - **Amarillo, "Debe el saldo":** cobrá y tocá "Cobré $50.000 en efectivo / transferencia · registrar ingreso".
+  - **Amarillo, "Debe el saldo":** cobrá y tocá "Cobré $60.000 en efectivo / transferencia · registrar ingreso" (el botón muestra el saldo de esa entrada).
   - **Amarillo, "Ya ingresó hoy":** ese QR ya se usó hoy.
   - **Rojo:** la entrada no tiene pago o está cancelada.
 - El domingo se registra el ingreso de nuevo: el sistema cuenta un ingreso por día.

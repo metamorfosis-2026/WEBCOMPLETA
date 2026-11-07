@@ -11,10 +11,9 @@ import {
   EVENT_HOURS_LABEL,
   EVENT_PLACE,
   FULL_PRICE_LABEL,
+  FULL_SAVINGS_LABEL,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
-  TICKET_PLANS,
-  formatPesos,
   type TicketPlan,
 } from '@/app/lib/entradas';
 import { INSTAGRAM_DM_URL } from '@/app/lib/inscripcion';
@@ -38,8 +37,6 @@ const ERROR_TEXT: Record<ErrorCode, string> = {
 // Si a los 6 s el navegador sigue en la pagina, mostramos el link a mano.
 const REDIRECT_FALLBACK_MS = 6000;
 
-const SAVINGS_LABEL = formatPesos(TICKET_PLANS.SPLIT.totalCents - TICKET_PLANS.FULL.totalCents);
-
 // `amount` y `times`: el precio partido para la opcion angosta del celular
 // ("2×" chico al lado del monto, asi nunca se corta en dos lineas).
 const PLAN_COPY: Record<TicketPlan, { title: string; detail: string; price: string; amount: string; times?: string; note: string }> = {
@@ -48,7 +45,7 @@ const PLAN_COPY: Record<TicketPlan, { title: string; detail: string; price: stri
     detail: 'Pagás todo hoy y listo.',
     price: FULL_PRICE_LABEL,
     amount: FULL_PRICE_LABEL,
-    note: `Ahorrás ${SAVINGS_LABEL}`,
+    note: `Ahorrás ${FULL_SAVINGS_LABEL}`,
   },
   SPLIT: {
     title: 'En 2 pagos',

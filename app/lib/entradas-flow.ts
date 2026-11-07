@@ -22,8 +22,10 @@ import {
   computeTicketStatus,
   formatPesos,
   nextInstallment,
+  repricedTotal,
   ticketPaths,
   ticketStatusLabel,
+  totalForFirstPayment,
   type TicketPlan,
   type TicketStatus,
 } from './entradas';
@@ -95,7 +97,26 @@ export function absoluteTicketLinks(siteUrl: string, code: string): TicketLinks 
 
 /* ----------------------------------------------------------------- checkout */
 
-export async function createPaymentLink(ticket: Ticket, siteUrl: string) {
+// Estados de MP de un pago que ya se acredito o todavia se puede acreditar.
+const LIVE_PAYMENT_STATUSES = new Set(['approved', 'authorized', 'pending', 'in_process', 'in_mediation']);
+
+/*
+  Entrada sin ningun pago armada con otro precio (por ejemplo, antes de un
+  cambio de precios): se pasa al precio de hoy antes de cobrarla. Si tiene un
+  pago en proceso (un cupon de Rapipago sacado antes del cambio), conserva el
+  precio con el que se armo ese pago.
+*/
+async function withCurrentPrice(ticket: Ticket) {
+  const total = repricedTotal(ticket);
+  if (total === null) return ticket;
+  const payments = await listTicketPayments(ticket.id);
+  if (payments.some((payment) => LIVE_PAYMENT_STATUSES.has(payment.status))) return ticket;
+  const updated = await updateTicketIfStatus(ticket.id, 'PENDIENTE', { total_cents: total });
+  return updated ?? (await getTicketById(ticket.id)) ?? ticket;
+}
+
+export async function createPaymentLink(original: Ticket, siteUrl: string) {
+  const ticket = await withCurrentPrice(original);
   const next = nextInstallment(ticket);
   if (!next) return null;
 
@@ -163,16 +184,23 @@ async function refreshTicket(ticketId: string, siteUrl: string, options: { planF
     if (!ticket) throw new Error('TICKET_NOT_FOUND');
 
     const payments = await listTicketPayments(ticketId);
-    const paid = payments.filter((p) => p.status === 'approved').reduce((sum, p) => sum + p.amountCents, 0);
+    const approved = payments.filter((p) => p.status === 'approved');
+    const paid = approved.reduce((sum, p) => sum + p.amountCents, 0);
 
     let plan = ticket.plan;
     if (options.planFromPayment && options.planFromPayment !== plan && ticket.paidCents === 0) {
       plan = options.planFromPayment;
     }
-    const total = plan === ticket.plan ? ticket.totalCents : TICKET_PLANS[plan].totalCents;
+    let total = plan === ticket.plan ? ticket.totalCents : TICKET_PLANS[plan].totalCents;
+    // Primer pago acreditado: si salio de un link de MP con el precio anterior
+    // (abierto o sacado antes del cambio), la entrada conserva ese precio.
+    if (ticket.paidCents === 0 && paid > 0) {
+      const first = approved.find((p) => p.method === 'MERCADO_PAGO' && p.installment === 1);
+      if (first) total = totalForFirstPayment(plan, first.amountCents, total);
+    }
     const status = computeTicketStatus(total, paid, ticket.status === 'CANCELADO');
 
-    if (status === ticket.status && paid === ticket.paidCents && plan === ticket.plan) {
+    if (status === ticket.status && paid === ticket.paidCents && plan === ticket.plan && total === ticket.totalCents) {
       return ticket;
     }
 
