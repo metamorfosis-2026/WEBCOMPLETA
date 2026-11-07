@@ -33,13 +33,17 @@ export const TICKET_CODE_RE = /\bM7-[2-9A-HJ-NP-Z]{8}\b/i;
 export const EVENT_NAME = EDITION_NAME;
 export const EVENT_DATE_LABEL = 'Sábado 28 y domingo 29 de noviembre';
 export const EVENT_SCHEDULE_LABEL = FASE1_SCHEDULE;
-export const EVENT_HOURS_LABEL = '10:30 a 18:30';
+export const EVENT_HOURS_LABEL = '11 a 17 hs';
 export const EVENT_PLACE = EDITION_PLACE;
 // Direccion exacta: si se carga en Vercel sale en los mensajes de WhatsApp.
 export const EVENT_ADDRESS = (process.env.NEXT_PUBLIC_EVENT_ADDRESS ?? '').trim();
-export const EVENT_START = new Date('2026-11-28T10:30:00-03:00');
-export const EVENT_END = new Date('2026-11-29T18:30:00-03:00');
+export const EVENT_START = new Date('2026-11-28T11:00:00-03:00');
+export const EVENT_END = new Date('2026-11-29T17:00:00-03:00');
 export const BALANCE_DEADLINE_LABEL = 'antes del sábado 28';
+
+// Flyer oficial (public/entradas/flyer-7ma.jpg): og:image de /entradas y
+// primera imagen que manda el WhatsApp.
+export const FLYER_PATH = '/entradas/flyer-7ma.jpg';
 
 // Numero del WhatsApp Business (solo digitos), para los botones "escribinos".
 export const BUSINESS_WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '').replace(/\D+/g, '');

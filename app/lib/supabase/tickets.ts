@@ -442,8 +442,49 @@ export async function countRecentBotReplies(phone: string, sinceIso: string) {
     .select('id', { count: 'exact', head: true })
     .eq('phone', phone)
     .eq('direction', 'OUT')
-    .in('kind', ['BOT', 'IA'])
+    .in('kind', ['BOT', 'IA', 'FLYER'])
     .gte('created_at', sinceIso);
   assertNoError(error);
   return count ?? 0;
+}
+
+// Le escribimos algo a este numero desde `sinceIso`? (si no, es primer contacto)
+export async function hasOutgoingSince(phone: string, sinceIso: string) {
+  const supabase = createAdminClient();
+  const { count, error } = await supabase
+    .from('whatsapp_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('phone', phone)
+    .eq('direction', 'OUT')
+    .eq('ok', true)
+    .gte('created_at', sinceIso);
+  assertNoError(error);
+  return (count ?? 0) > 0;
+}
+
+// El flyer se manda una sola vez por contacto (salvo que lo pidan).
+export async function hasSentFlyer(phone: string) {
+  const supabase = createAdminClient();
+  const { count, error } = await supabase
+    .from('whatsapp_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('phone', phone)
+    .eq('direction', 'OUT')
+    .eq('kind', 'FLYER')
+    .eq('ok', true);
+  assertNoError(error);
+  return (count ?? 0) > 0;
+}
+
+// Mensajes desde una fecha (para el seguimiento de conversaciones que quedaron sin respuesta).
+export async function listMessagesSince(sinceIso: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('whatsapp_messages')
+    .select('*')
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: true })
+    .limit(5000);
+  assertNoError(error);
+  return ((data ?? []) as DbWhatsAppMessage[]).map(mapMessage);
 }

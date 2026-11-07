@@ -1,6 +1,6 @@
 # Entradas 7ma edición: Mercado Pago + QR + WhatsApp automático
 
-Sábado 28 y domingo 29 de noviembre · 10:30 a 18:30 · hasta 50 lugares.
+Sábado 28 y domingo 29 de noviembre · de 11 a 17 hs · hasta 50 lugares.
 
 - **Pago único:** $72.000
 - **En 2 pagos:** $100.000 (2 × $50.000). El primero reserva el lugar y el segundo se paga antes del sábado 28.
@@ -23,15 +23,17 @@ Precios y fechas: `app/lib/entradas.ts`. Todo lo demás (web, WhatsApp, Mercado 
 - El **viernes 27** todas las personas con entrada reciben un recordatorio: "mañana arrancamos", con el QR.
 - **En la puerta** se escanea el QR con un celular donde haya una sesión de admin iniciada, y se toca **Registrar ingreso**.
 
-**El WhatsApp se atiende solo.** El bot contesta todos los mensajes de personas: precio, fecha, lugar, de qué se trata, cómo se paga, estado de la entrada, reenvío del QR. Le escribe con el tono de la guía de comunicación (`docs/metamorfosis-system-prompt.md`). Algunos detalles de cómo trabaja:
+**El WhatsApp se atiende solo.** El bot contesta todos los mensajes de personas: precio, fecha, lugar, de qué se trata, cómo se paga, estado de la entrada, reenvío del QR. Acompaña la decisión con la guía de venta consultiva de `docs/metamorfosis-system-prompt.md` (sección 11). Algunos detalles de cómo trabaja:
 
+- **Primer mensaje:** a quien escribe por primera vez (sin mensajes nuestros en los últimos 30 días) le llega primero el flyer (`public/entradas/flyer-7ma.jpg`) y después la bienvenida. Si ya trajo una pregunta, la IA la responde en ese mismo texto. El flyer se manda una sola vez por contacto, salvo que lo pidan.
 - Recuerda lo hablado con cada número durante 24 horas.
 - Si alguien manda varios mensajes seguidos, contesta una sola vez.
 - A los audios les pide que lo escriban.
 - No contesta en grupos ni en estados.
 - No contesta mensajes viejos, como los que llegan al conectar el WhatsApp por QR.
+- **Seguimiento:** si la persona deja de responder, le llega un único mensaje amable a las 24 horas (lo manda el cron diario, solo con Evolution). Nunca insiste.
 
-Con `ANTHROPIC_API_KEY` responde la IA (Claude). Sin esa clave, o si la IA falla, contesta un menú automático con precio, fecha, lugar y el link de compra.
+Con `ANTHROPIC_API_KEY` responde la IA (Claude). Sin esa clave, o si la IA falla, a quien escribe por primera vez le llega la bienvenida tal cual, y al resto un menú automático con precio, fecha, lugar y el link de compra.
 
 ---
 

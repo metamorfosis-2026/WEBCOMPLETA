@@ -69,11 +69,19 @@ async function evolutionText(to: string, text: string) {
   await postJson(evolutionUrl('/message/sendText'), { apikey: env('EVOLUTION_API_KEY') }, { number: to, text });
 }
 
+// La imagen de la entrada es PNG y el flyer JPG: el tipo sale de la extension.
+function imageMeta(imageUrl: string) {
+  const isJpg = /\.jpe?g(\?|$)/i.test(imageUrl);
+  return isJpg
+    ? { mimetype: 'image/jpeg', fileName: 'metamorfosis-7ma-edicion.jpg' }
+    : { mimetype: 'image/png', fileName: 'entrada-metamorfosis.png' };
+}
+
 async function evolutionImage(to: string, imageUrl: string, caption: string) {
   await postJson(
     evolutionUrl('/message/sendMedia'),
     { apikey: env('EVOLUTION_API_KEY') },
-    { number: to, mediatype: 'image', mimetype: 'image/png', media: imageUrl, caption, fileName: 'entrada-metamorfosis.png' }
+    { number: to, mediatype: 'image', media: imageUrl, ...imageMeta(imageUrl), ...(caption ? { caption } : {}) }
   );
 }
 
@@ -102,7 +110,7 @@ async function cloudImage(to: string, imageUrl: string, caption: string) {
     messaging_product: 'whatsapp',
     to,
     type: 'image',
-    image: { link: imageUrl, caption },
+    image: { link: imageUrl, ...(caption ? { caption } : {}) },
   });
 }
 
@@ -132,7 +140,8 @@ export type OutgoingWhatsApp = {
 
 /*
   Manda un mensaje con el proveedor configurado. Con imagen, la imagen va con
-  el texto como pie; si la imagen falla se reintenta como texto solo.
+  el texto como pie; si la imagen falla se reintenta como texto solo. Sin
+  texto (por ejemplo, el flyer) va la imagen sola y, si falla, se informa.
   `inConversation` = la persona nos acaba de escribir (bot), asi que en Cloud
   API se puede mandar texto libre aunque haya plantillas.
 */
@@ -154,6 +163,10 @@ export async function sendWhatsApp(
     const sendImage = provider === 'evolution' ? evolutionImage : cloudImage;
 
     if (message.imageUrl) {
+      if (!message.text.trim()) {
+        await sendImage(to, message.imageUrl, '');
+        return { ok: true, provider };
+      }
       try {
         await sendImage(to, message.imageUrl, message.text);
         return { ok: true, provider };

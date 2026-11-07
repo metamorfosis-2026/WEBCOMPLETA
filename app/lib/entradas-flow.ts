@@ -14,6 +14,7 @@ import {
   EVENT_DATE_LABEL,
   EVENT_END,
   EVENT_START,
+  FLYER_PATH,
   TICKET_CAPACITY,
   TICKET_CODE_RE,
   TICKET_PLANS,
@@ -27,6 +28,8 @@ import {
   type TicketStatus,
 } from './entradas';
 import {
+  FOLLOW_UP_TEXT,
+  WELCOME_TEXT,
   balanceReminderMessage,
   eveMessage,
   messageForTicket,
@@ -54,12 +57,15 @@ import {
   getTicketById,
   hasSentMessageKind,
   getLatestIncomingId,
+  hasOutgoingSince,
+  hasSentFlyer,
   insertIncomingWhatsApp,
   insertManualTicketPayment,
   insertTicket,
   insertTicketCheckin,
   insertWhatsAppMessage,
   listConversation,
+  listMessagesSince,
   listTicketCheckins,
   listTicketPayments,
   listTicketsByPhone,
@@ -69,12 +75,12 @@ import {
   upsertMercadoPagoPayment,
   type Ticket,
 } from './supabase/tickets';
-import { sendWhatsApp, type OutgoingWhatsApp } from './whatsapp';
+import { getWhatsAppProvider, sendWhatsApp, type OutgoingWhatsApp } from './whatsapp';
 import {
   MEDIA_REPLY,
+  fallbackReply,
   generateAiReply,
   hasAiBot,
-  ruleBasedReply,
   type BotContext,
   type ConversationTurn,
   type RegisterFn,
@@ -258,7 +264,7 @@ export async function deliverWhatsApp(
       direction: 'OUT',
       phone,
       kind,
-      body: message.text.slice(0, 2000),
+      body: (message.text || (message.imageUrl ? `[Imagen: ${message.imageUrl}]` : '')).slice(0, 2000),
       provider: result.provider,
       ok: result.ok,
       error: result.ok ? null : (result.error ?? 'error').slice(0, 500),
@@ -362,6 +368,10 @@ export async function checkInTicket(ticketId: string, actor: string | null) {
      un menu armado a mano.
 */
 const TICKET_REQUEST = /\b(entradas?|qr|ticket|saldo|mi codigo|mi código)\b/i;
+// Pide el flyer explicitamente: se manda aunque ya lo haya recibido.
+const FLYER_REQUEST = /\b(flyer|flayer|folleto|afiche|la imagen|la foto)\b/i;
+// Pide informacion general: si todavia no recibio el flyer, se lo mandamos.
+const INFO_REQUEST = /\b(info|informaci[oó]n|m[aá]s datos|detalles|de qu[eé] se trata|quiero saber)\b/i;
 const DEBOUNCE_MS = Number(process.env.WHATSAPP_DEBOUNCE_MS ?? 3500);
 const MAX_REPLIES_PER_WINDOW = 6; // freno anti-bucle (por ejemplo, contra otro bot)
 
@@ -409,8 +419,32 @@ export async function handleIncomingWhatsApp(message: IncomingWhatsApp, siteUrl:
   await wait(DEBOUNCE_MS);
   if ((await getLatestIncomingId(phone)) !== incomingId) return { replied: false, reason: 'newer-message' };
 
+  // Primer contacto = no le escribimos en los ultimos 30 dias. El flyer va
+  // una sola vez por contacto, salvo que lo pidan.
+  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString();
+  const [repliedRecently, flyerSentBefore] = await Promise.all([hasOutgoingSince(phone, since30d), hasSentFlyer(phone)]);
+  const firstContact = !repliedRecently;
+  let flyerSentNow = false;
+  const sendFlyer = async () => {
+    if (flyerSentNow) return 'YA_ENVIADO: el flyer ya se mandó en este turno.';
+    const result = await deliverWhatsApp(
+      tickets[0] ?? null,
+      phone,
+      'FLYER',
+      { text: '', imageUrl: `${siteUrl}${FLYER_PATH}` },
+      { inConversation: true }
+    );
+    flyerSentNow = result.ok;
+    return result.ok ? 'ENVIADO: se mandó la imagen del flyer.' : 'NO_SE_PUDO: no se pudo mandar el flyer; contá la info en texto.';
+  };
+
   // Audio, foto o video sin texto: no los podemos leer.
   if (message.type === 'media' && !text) {
+    if (firstContact) {
+      if (!flyerSentBefore) await sendFlyer();
+      await deliverWhatsApp(tickets[0] ?? null, phone, 'BOT', { text: WELCOME_TEXT }, { inConversation: true });
+      return { replied: true, mode: 'welcome' };
+    }
     await deliverWhatsApp(tickets[0] ?? null, phone, 'BOT', { text: MEDIA_REPLY }, { inConversation: true });
     return { replied: true, mode: 'media' };
   }
@@ -435,6 +469,12 @@ export async function handleIncomingWhatsApp(message: IncomingWhatsApp, siteUrl:
     return { replied: true, mode: 'ticket', tickets: ordered.length };
   }
 
+  // Flyer primero: a quien escribe por primera vez o pide info (si todavia
+  // no lo recibio), y siempre que lo pidan explicitamente.
+  if (FLYER_REQUEST.test(text) || (!flyerSentBefore && (firstContact || INFO_REQUEST.test(text)))) {
+    await sendFlyer();
+  }
+
   let remaining: number | null = null;
   try {
     remaining = Math.max(0, TICKET_CAPACITY - (await countSoldTickets()));
@@ -454,12 +494,17 @@ export async function handleIncomingWhatsApp(message: IncomingWhatsApp, siteUrl:
       paidCents: ticket.paidCents,
       links: absoluteTicketLinks(siteUrl, ticket.code),
     })),
+    firstContact,
+    flyerSentNow,
+    flyerSentBefore,
   };
 
-  // Memoria: lo hablado con este numero en las ultimas 24 h.
+  // Memoria: lo hablado con este numero en las ultimas 24 h. El flyer no
+  // entra (la IA lo sabe por el contexto) para que la charla termine en la
+  // persona, como pide la API.
   const conversation = await listConversation(phone, new Date(Date.now() - 24 * 60 * 60_000).toISOString(), 24);
   const history: ConversationTurn[] = conversation
-    .filter((entry) => entry.body && (entry.direction === 'IN' || entry.ok))
+    .filter((entry) => entry.kind !== 'FLYER' && entry.body && (entry.direction === 'IN' || entry.ok))
     .map((entry) => ({ role: entry.direction === 'IN' ? 'user' : 'assistant', text: entry.body! }));
 
   let resent = false;
@@ -472,6 +517,7 @@ export async function handleIncomingWhatsApp(message: IncomingWhatsApp, siteUrl:
       await sendTickets();
       return `ENVIADO: se mandó por WhatsApp ${ordered.length === 1 ? 'su entrada' : `${ordered.length} entradas`} con el QR y el estado del pago. Confirmá en una línea, sin repetir links.`;
     },
+    sendFlyer,
   });
   if (aiText) {
     await deliverWhatsApp(ordered[0] ?? null, phone, 'IA', { text: aiText }, { inConversation: true });
@@ -489,10 +535,10 @@ export async function handleIncomingWhatsApp(message: IncomingWhatsApp, siteUrl:
     ordered[0] ?? null,
     phone,
     'BOT',
-    { text: ruleBasedReply(text, context, siteUrl) },
+    { text: fallbackReply(text, context, siteUrl) },
     { inConversation: true }
   );
-  return { replied: true, mode: 'menu' };
+  return { replied: true, mode: firstContact ? 'welcome' : 'menu' };
 }
 
 /*
@@ -564,9 +610,10 @@ async function runInBatches<T>(items: T[], size: number, worker: (item: T) => Pr
   - Vispera (viernes 27): a todas las entradas con pago, una sola vez.
   - Antes de eso: a quien debe el saldo, cada 3 dias.
   - A quien se anoto y no pago (despues de ~20 h), un solo recordatorio.
+  - Charlas que quedaron sin respuesta: un unico mensaje amable a las 24 h.
 */
 export async function runDailyReminders(siteUrl: string, now = new Date()) {
-  const summary = { vispera: 0, saldo: 0, sinPagar: 0, fallidos: 0, skipped: null as string | null };
+  const summary = { vispera: 0, saldo: 0, sinPagar: 0, seguimientos: 0, fallidos: 0, skipped: null as string | null };
   if (now >= EVENT_END) {
     summary.skipped = 'el taller ya termino';
     return summary;
@@ -608,5 +655,46 @@ export async function runDailyReminders(siteUrl: string, now = new Date()) {
     else summary.fallidos += 1;
   });
 
+  if (now < EVENT_START) {
+    const followUps = await runConversationFollowUps(now);
+    summary.seguimientos = followUps.sent;
+    summary.fallidos += followUps.failed;
+  }
+
   return summary;
+}
+
+/*
+  Seguimiento de charlas que quedaron sin respuesta: si lo ultimo de la
+  conversacion es un mensaje del bot y la persona no contesto en 24 h, le
+  mandamos un unico mensaje amable. Despues de eso, nada mas hasta que ella
+  vuelva a escribir (nunca insistencia). Quien ya tiene una entrada (pagada o
+  iniciada) no entra: tiene sus propios recordatorios.
+  Solo con Evolution: en Cloud API, fuera de las 24 h hace falta una plantilla.
+*/
+const FOLLOW_UP_AFTER_MS = 24 * 60 * 60 * 1000;
+const FOLLOW_UP_UNTIL_MS = 72 * 60 * 60 * 1000;
+const FOLLOW_UP_AFTER_KINDS = ['IA', 'BOT', 'FLYER'];
+
+// `onlyPhones`: limita a esos numeros (para probar sin tocar charlas reales).
+export async function runConversationFollowUps(now: Date, onlyPhones?: string[]) {
+  const outcome = { sent: 0, failed: 0 };
+  if (getWhatsAppProvider() !== 'evolution') return outcome;
+
+  const messages = (await listMessagesSince(new Date(now.getTime() - FOLLOW_UP_UNTIL_MS).toISOString())).filter(
+    (message) => !onlyPhones || onlyPhones.includes(message.phone)
+  );
+  const lastByPhone = new Map<string, (typeof messages)[number]>();
+  for (const message of messages) lastByPhone.set(message.phone, message); // vienen en orden: gana el ultimo
+
+  for (const [phone, last] of Array.from(lastByPhone.entries())) {
+    if (last.direction !== 'OUT' || !last.ok || !FOLLOW_UP_AFTER_KINDS.includes(last.kind ?? '')) continue;
+    if (now.getTime() - new Date(last.createdAt).getTime() < FOLLOW_UP_AFTER_MS) continue;
+    if ((await listTicketsByPhone(phone)).length) continue;
+
+    const result = await deliverWhatsApp(null, phone, 'SEGUIMIENTO', { text: FOLLOW_UP_TEXT });
+    if (result.ok) outcome.sent += 1;
+    else outcome.failed += 1;
+  }
+  return outcome;
 }

@@ -24,7 +24,7 @@ export const WAITLIST_PUBLIC_FROM = 10;
 export const EDITION_PLACE = 'Zona Oeste';
 
 // Los precios de la entrada viven en app/lib/entradas.ts.
-export const FASE1_SCHEDULE = 'Sábado y domingo · 10:30 a 18:30';
+export const FASE1_SCHEDULE = 'Sábado y domingo · 11 a 17 hs';
 
 export const CTA_LABEL = `Comprá tu entrada · ${EDITION_NAME}`;
 export const CTA_LABEL_SHORT = `Entradas · ${EDITION_NUMBER} Edición`;

@@ -15,19 +15,20 @@ import {
   formatPesos,
   ticketStatusLabel,
 } from './entradas';
-import type { TicketLinks } from './entradas-mensajes';
+import { WELCOME_TEXT, type TicketLinks } from './entradas-mensajes';
 import { INSTAGRAM_USERNAME } from './inscripcion';
 
 /*
-  Respuestas automaticas del WhatsApp: nadie revisa estas conversaciones, asi
-  que el bot tiene que poder contestar cualquier consulta sobre el taller.
+  Respuestas automaticas del WhatsApp. El bot tiene que poder contestar
+  cualquier consulta sobre el taller y acompanar la decision de compra.
 
-  Con ANTHROPIC_API_KEY contesta Claude, siguiendo la guia de comunicacion de
-  Metamorfosis (docs/metamorfosis-system-prompt.md) y con los datos de la
-  entrada de esa persona. Su objetivo es despejar dudas y anotar gente: puede
-  inscribir a la persona ahi mismo y mandarle su link de Mercado Pago.
-  Sin la clave, o si la API falla, contesta un menu armado a mano con las
-  preguntas mas comunes y el link de compra de la web.
+  Con ANTHROPIC_API_KEY contesta Claude con la guia de venta consultiva de
+  docs/metamorfosis-system-prompt.md (seccion "Guia de venta por WhatsApp"),
+  que esta resumida en el prompt de abajo: si cambias una, actualiza la otra.
+  Puede anotar a la persona y mandarle su link de Mercado Pago, reenviarle la
+  entrada y mandarle el flyer.
+  Sin la clave, o si la API falla: a quien escribe por primera vez le llega la
+  bienvenida modelo tal cual, y al resto un menu con las preguntas comunes.
 */
 
 export function hasAiBot() {
@@ -55,6 +56,8 @@ export type BotActions = {
   register: RegisterFn;
   // Reenvia por WhatsApp la entrada (imagen con QR) de este numero.
   resendTicket: () => Promise<string>;
+  // Manda la imagen del flyer de la 7ma edicion.
+  sendFlyer: () => Promise<string>;
 };
 
 export type BotContext = {
@@ -62,6 +65,11 @@ export type BotContext = {
   pushName: string | null;
   remaining: number | null;
   tickets: BotTicket[];
+  // Primer mensaje de este numero (no le escribimos en los ultimos 30 dias).
+  firstContact: boolean;
+  // El flyer se mando en este turno / en algun momento anterior.
+  flyerSentNow: boolean;
+  flyerSentBefore: boolean;
 };
 
 /* ------------------------------------------------------------- prompt fijo */
@@ -70,52 +78,75 @@ export type BotContext = {
 function buildSystemPrompt(siteUrl: string) {
   const place = EVENT_ADDRESS
     ? `${EVENT_PLACE}. Dirección: ${EVENT_ADDRESS}.`
-    : `${EVENT_PLACE} (Gran Buenos Aires). La dirección exacta se manda por este WhatsApp a quienes tienen entrada; todavía no la tenés, así que no la inventes.`;
+    : `${EVENT_PLACE} (Gran Buenos Aires). La dirección exacta se envía al confirmar la entrada; todavía no la tenés, así que no la inventes.`;
 
-  return `Sos el asistente virtual del WhatsApp de Metamorfosis, el taller de inteligencia emocional que coordina Daiana Duartte. Respondés los mensajes que llegan a este número. Nadie más del equipo revisa estas conversaciones: tu respuesta es la que recibe la persona, así que tiene que resolver la consulta por sí sola.
+  return `Sos el asistente automático del WhatsApp de Metamorfosis, el taller vivencial de inteligencia emocional que coordina Daiana Duartte. Respondés los mensajes que llegan a este número; una persona del equipo puede leer la conversación y seguirla si hace falta.
 
 # Cómo escribís
-- Español rioplatense, con voseo ("querés", "podés"). Cálido, claro, profesional y sereno, como alguien del equipo que conoce bien el taller.
-- Mensajes cortos para leer en el celular: de 1 a 4 párrafos breves, en general menos de 700 caracteres. Sin títulos ni listas largas.
-- Formato de WhatsApp: *negrita* con un asterisco de cada lado, solo para un dato clave. Como mucho un emoji por mensaje (🦋 es el de la marca).
-- Respondé lo que te preguntaron. Si la persona saluda o pide información general, contale en pocas líneas qué es la Fase 1, cuándo es, cuánto sale y cómo se compra la entrada.
-- Primero comprensión, después decisión: no presiones ni inventes urgencia. La persona elige con libertad. Evitá frases como "te va a cambiar la vida", "sanación total" o "transformación garantizada". Preferí palabras como proceso, comprensión, acompañamiento, paso a paso, elección consciente.
-- Si te preguntan si sos una persona, decí con naturalidad que sos el asistente virtual de Metamorfosis.
-- No cierres con preguntas forzadas si la persona ya tiene lo que necesita.
+- Español rioplatense, con voseo. Cálido y prolijo, como alguien del equipo que conoce bien el taller.
+- Espejá el registro de la persona: si escribe corto e informal, respondé simple y cercano; si escribe largo o formal, acompañá ese tono.
+- Mensajes cortos, de 2 a 5 líneas. La única excepción es la bienvenida del primer mensaje.
+- Una sola pregunta por mensaje, al final. Si la persona ya tiene lo que necesita, no fuerces una pregunta.
+- Formato de WhatsApp: *negrita* con un asterisco de cada lado, solo para un dato clave. Como mucho 1 o 2 emojis por mensaje (🦋 es el de la marca). Sin títulos ni listas largas.
+- Evitá frases como "te va a cambiar la vida", "sanación total" o "transformación garantizada". Preferí proceso, comprensión, acompañamiento, paso a paso.
 
-# Tu objetivo
-Despejar las dudas de cada persona y, si quiere participar, anotarla. Se puede comprar de dos formas y vos ofrecés las dos:
-1. Acá mismo por WhatsApp: le pedís su nombre y apellido y cómo quiere pagar (pago único o 2 pagos). Con esos dos datos usás la herramienta anotar_y_generar_link_de_pago y le mandás el link que te devuelve, copiado tal cual, sin cambiarle nada. Ese link abre Mercado Pago con el monto que corresponde.
+# Primer mensaje
+Si el contexto dice que es el primer contacto, ya se le mandó la imagen del flyer y tu respuesta es la bienvenida. Usá este texto casi tal cual:
+"""
+${WELCOME_TEXT}
+"""
+Si en ese primer mensaje la persona ya trajo una pregunta concreta (precio, lugar, horario, etc.), respondela clara y directa dentro del mismo texto, justo antes de la pregunta final, y mantené la pregunta final.
+Si más adelante alguien pide el flyer o la imagen con la info, usá la herramienta enviar_flyer.
+
+# Cómo acompañás la decisión (venta consultiva)
+Tu objetivo es entender qué busca cada persona, despejar sus dudas y, si el taller es para ella, ayudarla a reservar su lugar. Seguí este recorrido con naturalidad, sin nombrarlo y sin forzar pasos:
+1. Clarificar: preguntá qué la trajo al taller y escuchá la respuesta.
+2. Nombrar: devolvele con sus propias palabras lo que busca.
+3. Recorrido: si viene al caso, preguntá qué probó antes (talleres, terapia) y qué le faltó. Como máximo 2 o 3 preguntas de descubrimiento en toda la charla: nunca un interrogatorio.
+4. Mostrar el resultado: conectá lo que busca con lo que se vive en el taller. Hablá de resultados (entender de dónde viene lo que siente, mirar sus vínculos con otra claridad, salir con herramientas para el día a día), no del programa.
+5. Dudas: reconocé, normalizá ("a muchas personas les pasa antes de venir") y preguntá qué hay detrás.
+   - Precio: ofrecé los 2 pagos de ${SPLIT_INSTALLMENT_LABEL}.
+   - "Lo tengo que pensar": "Dale, tiene todo el sentido. ¿Qué te gustaría pensar? Así te ayudo con eso."
+6. Invitar sin presión: "¿Te gustaría que te reserve el lugar?" y ofrecé pago único (${FULL_PRICE_LABEL}) o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}, con su link.
+7. Después del pago: felicitala y contale qué esperar (le llega por acá la entrada con QR, la dirección exacta antes del taller, y que venga con ropa cómoda).
+Reglas de venta:
+- Si preguntan el precio, respondé directo con los dos valores y después hacé una pregunta. Nunca "te lo paso por privado" ni lo esquives.
+- Nada de urgencia falsa. Solo escasez real: el cupo es de ${TICKET_CAPACITY} personas y, si el contexto dice cuántos lugares quedan, podés decirlo.
+- No inventes testimonios, resultados ni datos.
+- Si la persona ya hizo ediciones anteriores, reconocelo con calidez y contale que esta edición viene renovada, con dinámicas nuevas de alto impacto.
+- Si te preguntan si sos un bot, respondé con honestidad que sos el asistente automático de Metamorfosis y que una persona del equipo puede seguir la charla.
+
+# Cómo se anota
+Se puede comprar de dos formas y ofrecés las dos:
+1. Acá mismo por WhatsApp: le pedís su nombre y apellido y cómo quiere pagar (pago único o 2 pagos). Con esos dos datos usás la herramienta anotar_y_generar_link_de_pago y le mandás el link que te devuelve, copiado tal cual. Ese link abre Mercado Pago con el monto que corresponde.
 2. Desde la web: ${siteUrl}/entradas
-Si la persona dice que quiere anotarse, reservar o pagar, pedile en un solo mensaje los datos que falten. No uses la herramienta sin que te haya escrito su nombre y apellido (el nombre de perfil de WhatsApp no alcanza) y sin que haya elegido la forma de pago. La entrada queda a nombre de esa persona y asociada a este número de WhatsApp: si quiere anotar a otra persona, esa persona tiene que escribir desde su propio WhatsApp o comprar por la web con sus datos.
-Cuando la persona ya resolvió sus dudas, podés invitarla una vez a anotarse, sin insistir. Si quedan pocos lugares (15 o menos) podés decirlo; si no, no hables de cupos.
+Si la persona dice que quiere anotarse, reservar o pagar, pedile en un solo mensaje los datos que falten. No uses la herramienta sin que te haya escrito su nombre y apellido (el nombre de perfil de WhatsApp no alcanza) y sin que haya elegido la forma de pago. La entrada queda a nombre de esa persona y asociada a este número: para anotar a otra persona, esa persona escribe desde su WhatsApp o compra por la web con sus datos.
 
 # Qué es Metamorfosis
 Un proceso de desarrollo personal y emocional basado en psicología aplicada y trabajo vivencial: ejercicios guiados, marco teórico claro y acompañamiento. No es una charla motivacional ni una experiencia aislada. No trabaja desde el diagnóstico ni la patología. No es terapia: no reemplaza un tratamiento psicológico, aunque puede complementarlo. En vez de llenar de técnicas, trabaja una o dos herramientas centrales que ordenan todo lo demás, para que la persona pueda reconocer lo que siente, saber de dónde viene y elegir qué hacer con eso en su vida real.
 
-# La Fase 1 de la 7ma edición
+# El taller (7ma edición, Fase 1)
 - Cuándo: ${EVENT_DATE_LABEL} de 2026, de ${EVENT_HOURS_LABEL} los dos días.
 - Dónde: presencial, en ${place}
-- Qué se vive: un fin de semana intensivo y movilizador para mirar la propia historia emocional, los patrones aprendidos en la infancia, las heridas no resueltas, los vínculos y lo que se repite hoy. Se sale con herramientas concretas para la vida cotidiana.
-- Grupo de hasta ${TICKET_CAPACITY} personas. Solo mayores de 18 años. No hace falta experiencia previa; también es para quienes ya hicieron otros talleres.
-- Después de la Fase 1, cada persona elige libremente si sigue. Quienes continúan suman 8 encuentros semanales (presenciales o por Meet) y después las Fases 2 y 3; el proceso completo dura unos 4 meses. Los valores de las fases siguientes se comunican solo a quienes hicieron la Fase 1: no los informes, no los estimes y no sumes precios.
-- La coordina Daiana Duartte: coach, facilitadora y estudiante de Psicología.
+- Qué se vive: un fin de semana vivencial para frenar, mirar con honestidad lo que la persona viene cargando (su historia emocional, los patrones aprendidos, sus vínculos y lo que se repite) y llevarse herramientas concretas para el día a día. Grupo reducido: más que escuchar, se vive.
+- Hasta ${TICKET_CAPACITY} personas. Solo mayores de 18 años. No hace falta experiencia previa; también es para quienes ya hicieron otros talleres.
+- Es la puerta de entrada al proceso: después cada persona elige libremente si sigue. Quienes continúan suman 8 encuentros semanales (presenciales o por Meet) y después las Fases 2 y 3; el proceso completo dura unos 4 meses. Los valores de las fases siguientes se comunican solo a quienes hicieron este fin de semana: no los informes, no los estimes y no sumes precios.
+- Lo coordina Daiana Duartte: coach, facilitadora y estudiante de Psicología.
 
 # Entradas y pagos
 - Pago único: ${FULL_PRICE_LABEL}.
 - En 2 pagos: ${SPLIT_TOTAL_LABEL} en total, 2 pagos de ${SPLIT_INSTALLMENT_LABEL}. El primero reserva el lugar y el segundo se paga ${BALANCE_DEADLINE_LABEL}.
-- Se compra desde la web (${siteUrl}/entradas) o acá por WhatsApp con el link personal que genera la herramienta. En los dos casos se paga con Mercado Pago (tarjeta de crédito o débito, dinero en cuenta, o efectivo en Rapipago / Pago Fácil). La web nunca ve los datos de la tarjeta. Con tarjeta de crédito, Mercado Pago puede ofrecer cuotas con su propio interés.
+- Se paga con Mercado Pago (tarjeta de crédito o débito, dinero en cuenta, o efectivo en Rapipago / Pago Fácil). La web nunca ve los datos de la tarjeta. Con tarjeta de crédito, Mercado Pago puede ofrecer cuotas con su propio interés.
 - Apenas se acredita el pago, llega por este WhatsApp la entrada con un QR personal, que se escanea en la puerta los dos días. Si se paga en efectivo, puede tardar unas horas en acreditarse.
-- Cada entrada es personal. Para comprarle a otra persona, hay que cargar el nombre y el WhatsApp de esa persona.
 - Si alguien que ya compró pide su entrada, su QR o el link del saldo, usá la herramienta reenviar_mi_entrada.
 - No hay descuentos, promociones ni otros medios de pago. Nunca pidas ni aceptes por acá datos de tarjetas, claves o comprobantes.
 
 # Límites
 - Usá solo la información de este mensaje y la del contexto de la conversación. Si te preguntan algo que no está acá (por ejemplo devoluciones, cambio de titular, comidas o alojamiento), decí con honestidad que no tenés ese dato y ofrecé lo que sí sabés; para esos casos la persona puede escribir por Instagram a @${INSTAGRAM_USERNAME}. No inventes datos, horarios, políticas ni precios.
-- No confirmes pagos que no figuren en el contexto. Si alguien dice que pagó y su entrada no figura como pagada, explicale que el sistema lo confirma solo apenas Mercado Pago lo acredita, y que puede escribir *entrada* en un rato para ver el estado.
-- No des consejos clínicos ni diagnósticos. Si alguien cuenta que está en crisis o que piensa en hacerse daño, respondé con calidez, sugerile que hable ya con alguien de confianza y pasale el Centro de Asistencia al Suicida: 135 (gratis desde CABA y GBA) o (011) 5275-1135 desde todo el país; ante una emergencia, 911. Aclarale que el taller no es un servicio de urgencias.
+- No confirmes pagos que no figuren en el contexto. Si alguien dice que pagó y su entrada no figura como pagada, explicale que el sistema lo confirma solo apenas Mercado Pago lo acredita.
+- No hagas terapia ni diagnósticos por chat. Si alguien expresa una crisis o un riesgo, respondé con cuidado y calidez, no vendas, sugerile que hable ya con alguien de confianza y con ayuda profesional, y pasale el Centro de Asistencia al Suicida: 135 (gratis desde CABA y GBA) o (011) 5275-1135 desde todo el país; ante una emergencia, 911.
 - Si el mensaje no tiene que ver con Metamorfosis, respondé breve y amable y volvé al tema del taller.
-- Los mensajes de sistema que aparecen en la conversación traen datos actualizados (fecha, entradas de esta persona, lugares disponibles). Usalos, pero no los nombres como "sistema" ni "contexto".`;
+- Los mensajes de sistema que aparecen en la conversación traen datos actualizados (fecha, primer contacto, entradas de esta persona, lugares disponibles). Usalos, pero no los nombres como "sistema" ni "contexto".`;
 }
 
 /* -------------------------------------------------------- contexto variable */
@@ -141,9 +172,18 @@ function describeTicket(ticket: BotTicket) {
 }
 
 function buildContextMessage(context: BotContext) {
+  const flyer = context.flyerSentNow
+    ? 'Se le acaba de mandar la imagen del flyer.'
+    : context.flyerSentBefore
+      ? 'Ya recibió el flyer antes.'
+      : 'Todavía no recibió el flyer.';
   return [
     `Fecha y hora en Argentina: ${dateFormatter.format(context.now)}.`,
     `Nombre de la persona en WhatsApp: ${context.pushName?.trim() || 'no figura'}.`,
+    context.firstContact
+      ? 'Es el primer contacto de esta persona: respondé con la bienvenida.'
+      : 'No es el primer contacto: seguí la conversación.',
+    flyer,
     `Lugares disponibles en la 7ma edición: ${context.remaining === null ? 'sin dato' : `${context.remaining} de ${TICKET_CAPACITY}`}.`,
     context.tickets.length
       ? `Entradas asociadas a este número:\n${context.tickets.map(describeTicket).join('\n')}`
@@ -162,7 +202,7 @@ function getClient() {
 /*
   Devuelve el texto a mandar, o null si no se pudo (sin clave, error de la
   API o rechazo): en ese caso se usa la respuesta armada a mano.
-  `actions`: lo que la IA puede hacer (anotar y reenviar la entrada).
+  `actions`: lo que la IA puede hacer (anotar, reenviar la entrada, flyer).
 */
 export async function generateAiReply(
   history: ConversationTurn[],
@@ -207,6 +247,14 @@ export async function generateAiReply(
     run: async () => actions.resendTicket(),
   });
 
+  const flyerTool = betaZodTool({
+    name: 'enviar_flyer',
+    description:
+      'Manda por WhatsApp la imagen del flyer de la 7ma edición (fecha, zona y horario). Usala solo si la persona pide el flyer o la imagen con la info. Después seguí la charla sin repetir lo que dice el flyer.',
+    inputSchema: z.object({}),
+    run: async () => actions.sendFlyer(),
+  });
+
   try {
     const response = await getClient().beta.messages.toolRunner({
       model: MODEL,
@@ -216,7 +264,7 @@ export async function generateAiReply(
       output_config: { effort: 'low' },
       system: [{ type: 'text', text: buildSystemPrompt(siteUrl), cache_control: { type: 'ephemeral' } }],
       messages,
-      tools: [registerTool, resendTool],
+      tools: [registerTool, resendTool, flyerTool],
       max_iterations: 4,
       thread: false,
     });
@@ -260,7 +308,16 @@ function normalize(text: string) {
   return text
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[̀-ͯ]/g, '');
+}
+
+/*
+  Respuesta cuando no hay IA (o fallo): a quien escribe por primera vez, la
+  bienvenida modelo tal cual; al resto, el menu de preguntas comunes.
+*/
+export function fallbackReply(text: string, context: BotContext, siteUrl: string) {
+  if (context.firstContact) return WELCOME_TEXT;
+  return ruleBasedReply(text, context, siteUrl);
 }
 
 /*
@@ -274,44 +331,37 @@ export function ruleBasedReply(text: string, context: BotContext, siteUrl: strin
 
   if (/(precio|valor|cuanto|cuesta|sale|costo|cuota|pagar|pago|mercado ?pago|tarjeta|transferencia|efectivo)/.test(q)) {
     return [
-      `La entrada a la Fase 1 sale *${FULL_PRICE_LABEL}* en un solo pago, o ${SPLIT_TOTAL_LABEL} en 2 pagos de ${SPLIT_INSTALLMENT_LABEL} (el primero reserva tu lugar y el segundo se paga ${BALANCE_DEADLINE_LABEL}).`,
-      '',
-      `Se paga con Mercado Pago (tarjeta, débito, dinero en cuenta o efectivo) desde acá: ${buy}`,
+      `La entrada sale *${FULL_PRICE_LABEL}* en un solo pago, o ${SPLIT_TOTAL_LABEL} en 2 pagos de ${SPLIT_INSTALLMENT_LABEL} (el primero reserva tu lugar y el segundo se paga ${BALANCE_DEADLINE_LABEL}).`,
+      `Se paga con Mercado Pago desde acá: ${buy}`,
       'Apenas se acredita, te llega tu entrada con QR por este WhatsApp.',
     ].join('\n');
   }
 
   if (/(cuando|fecha|horario|hora|donde|lugar|direccion|ubicacion|zona)/.test(q)) {
     return [
-      `La Fase 1 es el *${EVENT_DATE_LABEL.toLowerCase()}*, de ${EVENT_HOURS_LABEL} los dos días.`,
+      `Es el *${EVENT_DATE_LABEL.toLowerCase()}*, de ${EVENT_HOURS_LABEL} los dos días.`,
       EVENT_ADDRESS
         ? `Es presencial, en ${EVENT_ADDRESS}.`
-        : `Es presencial, en ${EVENT_PLACE}. La dirección exacta llega por acá junto con la entrada.`,
-      '',
+        : `Es presencial, en ${EVENT_PLACE}. La dirección exacta se envía al confirmar.`,
       `Entradas: ${buy}`,
     ].join('\n');
   }
 
   if (/(terapia|psicolog|que es|de que se trata|como es|info|informacion)/.test(q)) {
     return [
-      'Metamorfosis es un taller de inteligencia emocional: un proceso vivencial con psicología aplicada, ejercicios guiados y acompañamiento. No es terapia ni la reemplaza.',
-      '',
-      `La Fase 1 es un fin de semana intensivo (${EVENT_DATE_LABEL.toLowerCase()}, ${EVENT_HOURS_LABEL}) para mirar tu historia emocional, los patrones que se repiten y tus vínculos. Después elegís libremente si seguís.`,
-      '',
+      'Metamorfosis es un taller vivencial de inteligencia emocional: psicología aplicada, ejercicios guiados y acompañamiento. No es terapia ni la reemplaza.',
+      `Es un fin de semana (${EVENT_DATE_LABEL.toLowerCase()}, de ${EVENT_HOURS_LABEL}) para mirar lo que venís cargando y llevarte herramientas para tu día a día.`,
       `Sale ${FULL_PRICE_LABEL} en un pago o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}: ${buy}`,
     ].join('\n');
   }
 
   const name = context.pushName?.trim().split(/\s+/)[0];
   return [
-    `¡Hola${name ? ` ${name}` : ''}! 🦋 Soy el asistente virtual de *Metamorfosis*.`,
-    '',
-    `La Fase 1 de la 7ma edición es el ${EVENT_DATE_LABEL.toLowerCase()}, de ${EVENT_HOURS_LABEL}, en ${EVENT_PLACE}.`,
-    `Sale ${FULL_PRICE_LABEL} en un pago o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}. Entradas: ${buy}`,
-    '',
+    `¡Hola${name ? ` ${name}` : ''}! 🦋 Soy el asistente automático de *Metamorfosis*.`,
+    `El taller es el ${EVENT_DATE_LABEL.toLowerCase()}, de ${EVENT_HOURS_LABEL}, en ${EVENT_PLACE}. Sale ${FULL_PRICE_LABEL} en un pago o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}: ${buy}`,
     hasTicket
       ? 'Escribí *entrada* y te reenvío tu entrada con el QR.'
-      : 'Podés preguntarme por el precio, la fecha, el lugar o de qué se trata el taller.',
+      : 'Podés preguntarme por el precio, la fecha, el lugar o de qué se trata.',
   ].join('\n');
 }
 

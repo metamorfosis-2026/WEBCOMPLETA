@@ -19,7 +19,7 @@ import {
 } from './entradas';
 import type { OutgoingWhatsApp } from './whatsapp';
 
-export type MessageKind = 'CONFIRMACION' | 'SENA' | 'SALDO' | 'VISPERA' | 'PENDIENTE' | 'BOT' | 'IA';
+export type MessageKind = 'CONFIRMACION' | 'SENA' | 'SALDO' | 'VISPERA' | 'PENDIENTE' | 'BOT' | 'IA' | 'FLYER' | 'SEGUIMIENTO';
 
 export type TicketForMessage = {
   code: string;
@@ -44,7 +44,7 @@ export function confirmationMessage(ticket: TicketForMessage, links: TicketLinks
     'Tu entrada para *Metamorfosis 7ma Edición* está confirmada ✅',
     '',
     `📅 ${EVENT_DATE_LABEL}`,
-    `🕥 ${EVENT_HOURS_LABEL} (los dos días)`,
+    `🕚 De ${EVENT_HOURS_LABEL}, los dos días`,
     PLACE_LINE,
     '',
     `🎟️ Código: *${ticket.code}*`,
@@ -71,7 +71,7 @@ export function depositMessage(ticket: TicketForMessage, links: TicketLinks): Ou
     links.pay,
     '',
     `📅 ${EVENT_DATE_LABEL}`,
-    `🕥 ${EVENT_HOURS_LABEL} (los dos días)`,
+    `🕚 De ${EVENT_HOURS_LABEL}, los dos días`,
     PLACE_LINE,
     '',
     `🎟️ Código: *${ticket.code}*`,
@@ -111,7 +111,7 @@ export function eveMessage(ticket: TicketForMessage, links: TicketLinks): Outgoi
   const text = [
     `${hello(ticket)} 🦋 ¡Mañana arrancamos *Metamorfosis 7ma Edición*!`,
     '',
-    `🕥 ${EVENT_HOURS_LABEL} (sábado y domingo)`,
+    `🕚 De ${EVENT_HOURS_LABEL}, sábado y domingo`,
     PLACE_LINE,
     '',
     `Tené a mano tu QR para la entrada: ${links.ticket}`,
@@ -149,3 +149,28 @@ export function messageForTicket(ticket: TicketForMessage, links: TicketLinks): 
   if (ticket.status === 'PENDIENTE') return { kind: 'PENDIENTE', message: pendingPaymentMessage(ticket, links) };
   return null;
 }
+
+/*
+  Bienvenida a quien escribe por primera vez (despues de la imagen del flyer).
+  Es el texto modelo: la IA lo adapta si la persona ya trajo una pregunta, y
+  sin IA se manda tal cual.
+*/
+export const WELCOME_TEXT = [
+  '¡Hola! Gracias por escribirnos 🦋',
+  '',
+  'Te compartimos la info de la 7ma edición de Metamorfosis, nuestro taller vivencial de inteligencia emocional:',
+  '',
+  `📅 ${EVENT_DATE_LABEL}`,
+  `🕚 De ${EVENT_HOURS_LABEL}`,
+  `📍 ${EVENT_PLACE} (la dirección exacta se envía al confirmar)`,
+  '',
+  'Es un fin de semana para frenar, mirar con honestidad lo que venís cargando y llevarte herramientas concretas para tu día a día. Es en grupo reducido y todo es vivencial: más que escuchar, se vive.',
+  '',
+  'Para orientarte mejor, ¿qué te llevó a interesarte en el taller?',
+].join('\n');
+
+// Seguimiento unico si la persona dejo de responder (sin insistir).
+export const FOLLOW_UP_TEXT = [
+  '¡Hola! 🦋 Te escribo por si te quedó alguna duda sobre el taller del 28 y 29 de noviembre.',
+  'Si querés, seguimos por acá cuando te quede cómodo.',
+].join('\n');
