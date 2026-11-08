@@ -11,6 +11,7 @@
 */
 
 import {
+  DUO_TOTAL_LABEL,
   EVENT_DATE_LABEL,
   EVENT_END,
   EVENT_START,
@@ -21,7 +22,11 @@ import {
   TICKET_PLANS,
   argentinaDay,
   computeTicketStatus,
+  duoBuyerSource,
+  duoGuestSource,
+  duoPartnerCode,
   formatPesos,
+  isDuoGuest,
   nextInstallment,
   repricedTotal,
   ticketPaths,
@@ -49,7 +54,7 @@ import {
   parseExternalReference,
   type MercadoPagoPayment,
 } from './mercadopago';
-import { toWhatsAppNumber } from './phone';
+import { isValidWhatsAppNumber, prettyPhone, toWhatsAppNumber } from './phone';
 import { isPublicHttps } from './site';
 import { listSignups, updateSignup } from './supabase/db';
 import {
@@ -86,6 +91,7 @@ import {
   hasAiBot,
   type BotContext,
   type ConversationTurn,
+  type RegisterDuoFn,
   type RegisterFn,
 } from './whatsapp-bot';
 
@@ -116,7 +122,117 @@ async function withCurrentPrice(ticket: Ticket) {
   return updated ?? (await getTicketById(ticket.id)) ?? ticket;
 }
 
-export async function createPaymentLink(original: Ticket, siteUrl: string) {
+/* ------------------------------------------------------- promo para dos */
+
+// La otra entrada de la promo para dos, si las dos siguen apuntandose entre si.
+async function duoPartner(ticket: Ticket) {
+  const partnerCode = duoPartnerCode(ticket);
+  if (!partnerCode) return null;
+  const partner = await getTicketByCode(partnerCode);
+  if (!partner || duoPartnerCode(partner) !== ticket.code) return null;
+  return partner;
+}
+
+/*
+  Pago de la promo para dos: un solo checkout por las 2 entradas, lo abra
+  quien lo abra. Si la otra entrada ya no esta (se pago aparte, se cancelo o
+  esa persona eligio otra forma de pago), esta pasa a pago unico.
+*/
+async function createDuoPaymentLink(ticket: Ticket, siteUrl: string) {
+  if (!nextInstallment(ticket)) return null;
+
+  const found = await duoPartner(ticket);
+  const partner = found ? await withCurrentPrice(found) : null;
+  const self = await withCurrentPrice(ticket);
+  const bothPending = (t: Ticket) => t.status === 'PENDIENTE' && t.paidCents === 0;
+  if (!partner || !bothPending(self) || !bothPending(partner)) {
+    const single = await updateTicketIfStatus(self.id, 'PENDIENTE', {
+      plan: 'FULL',
+      total_cents: TICKET_PLANS.FULL.totalCents,
+    });
+    return single ? createPaymentLink(single, siteUrl) : null;
+  }
+
+  const links = absoluteTicketLinks(siteUrl, self.code);
+  const preference = await createCheckoutPreference({
+    code: self.code,
+    partnerCode: partner.code,
+    plan: 'DUO',
+    installment: 1,
+    amountCents: self.totalCents + partner.totalCents,
+    title: 'Metamorfosis 7ma Edición · Promo para dos (2 entradas)',
+    description: `Fase 1 · ${EVENT_DATE_LABEL} + ${SUPPORT_LABEL} · ${self.fullName} y ${partner.fullName}`,
+    payerName: self.fullName,
+    payerEmail: self.email,
+    successUrl: `${links.ticket}?pago=ok`,
+    pendingUrl: `${links.ticket}?pago=pendiente`,
+    failureUrl: `${links.ticket}?pago=error`,
+    notificationUrl: isPublicHttps(siteUrl) ? `${siteUrl}/api/mercadopago/webhook` : null,
+  });
+  return preference.url;
+}
+
+export type DuoError = 'SAME_PHONE' | 'BUYER_HAS_TICKET' | 'GUEST_HAS_TICKET' | 'SOLD_OUT';
+
+async function hasActiveTicket(phone: string) {
+  return (await listTicketsByPhone(phone)).some((t) => t.status === 'PAGADO' || t.status === 'SENADO');
+}
+
+/*
+  Crea (o reutiliza las pendientes de cada numero) las 2 entradas de la promo
+  para dos y las cruza. Cada una queda a nombre y WhatsApp de su persona:
+  ahi le llega su QR.
+*/
+export async function prepareDuoTickets(input: {
+  buyer: { fullName: string; phone: string; email: string | null };
+  guest: { fullName: string; phone: string };
+  origin: string;
+}): Promise<{ ok: true; buyer: Ticket; guest: Ticket } | { ok: false; error: DuoError }> {
+  if (input.buyer.phone === input.guest.phone) return { ok: false, error: 'SAME_PHONE' };
+  if (await hasActiveTicket(input.buyer.phone)) return { ok: false, error: 'BUYER_HAS_TICKET' };
+  if (await hasActiveTicket(input.guest.phone)) return { ok: false, error: 'GUEST_HAS_TICKET' };
+  if ((await countSoldTickets()) + 2 > TICKET_CAPACITY) return { ok: false, error: 'SOLD_OUT' };
+
+  const plan = TICKET_PLANS.DUO;
+  const upsertPending = async (
+    phone: string,
+    values: { full_name: string; email: string | null; source: string }
+  ) => {
+    const pending = await findPendingTicketByPhone(phone);
+    const base = { full_name: values.full_name, plan: plan.id, total_cents: plan.totalCents, source: values.source };
+    if (pending) return updateTicket(pending.id, values.email ? { ...base, email: values.email } : base);
+    return insertTicket({ ...base, email: values.email, edition_label: EDITION_LABEL, phone });
+  };
+
+  const buyer = await upsertPending(input.buyer.phone, {
+    full_name: input.buyer.fullName,
+    email: input.buyer.email,
+    source: input.origin,
+  });
+  const guest = await upsertPending(input.guest.phone, {
+    full_name: input.guest.fullName,
+    email: null,
+    source: duoGuestSource(buyer.code),
+  });
+  const linked = await updateTicket(buyer.id, { source: duoBuyerSource(input.origin, guest.code) });
+  return { ok: true, buyer: linked, guest };
+}
+
+export async function startDuoCheckout(
+  input: Parameters<typeof prepareDuoTickets>[0],
+  siteUrl: string
+): Promise<{ ok: true; ticket: Ticket; url: string } | { ok: false; error: DuoError }> {
+  const prepared = await prepareDuoTickets(input);
+  if ('error' in prepared) return { ok: false, error: prepared.error };
+  const url = await createPaymentLink(prepared.buyer, siteUrl);
+  if (!url) throw new Error('NO_PAYMENT_DUE');
+  return { ok: true, ticket: prepared.buyer, url };
+}
+
+/* ------------------------------------------------------------- link de pago */
+
+export async function createPaymentLink(original: Ticket, siteUrl: string): Promise<string | null> {
+  if (original.plan === 'DUO') return createDuoPaymentLink(original, siteUrl);
   const ticket = await withCurrentPrice(original);
   const next = nextInstallment(ticket);
   if (!next) return null;
@@ -125,7 +241,7 @@ export async function createPaymentLink(original: Ticket, siteUrl: string) {
   const title =
     ticket.plan === 'SPLIT'
       ? next.number === 1
-        ? 'Metamorfosis 7ma Edición · Entrada (1er pago de 2)'
+        ? 'Metamorfosis 7ma Edición · Entrada (seña)'
         : 'Metamorfosis 7ma Edición · Entrada (saldo)'
       : 'Metamorfosis 7ma Edición · Entrada';
 
@@ -149,7 +265,7 @@ export async function createPaymentLink(original: Ticket, siteUrl: string) {
 }
 
 export async function startCheckout(
-  input: { plan: TicketPlan; fullName: string; phone: string; email: string | null; source: string | null },
+  input: { plan: 'FULL' | 'SPLIT'; fullName: string; phone: string; email: string | null; source: string | null },
   siteUrl: string
 ) {
   const plan = TICKET_PLANS[input.plan];
@@ -260,20 +376,32 @@ export async function processMercadoPagoPayment(paymentId: string, siteUrl: stri
   const ticket = await getTicketByCode(reference.code);
   if (!ticket) return { handled: false as const, reason: 'ticket-not-found' };
 
-  await upsertMercadoPagoPayment({
-    ticket_id: ticket.id,
+  // Promo para dos: un pago por las 2 entradas. Se guarda la mitad en cada una
+  // (la segunda con un id propio, porque el id de MP es unico por fila).
+  const partner = reference.plan === 'DUO' && reference.partnerCode ? await getTicketByCode(reference.partnerCode) : null;
+  const amount = Math.round(Number(payment.transaction_amount) * 100);
+  const partnerShare = partner ? Math.floor(amount / 2) : 0;
+  const base = {
     installment: reference.installment,
-    amount_cents: Math.round(Number(payment.transaction_amount) * 100),
     status: payment.status,
     status_detail: payment.status_detail ?? null,
-    mp_payment_id: String(payment.id),
     payer_email: payment.payer?.email ?? null,
     paid_at: payment.date_approved ?? null,
-  });
+  };
 
-  const updated = await refreshTicket(ticket.id, siteUrl, {
-    planFromPayment: payment.status === 'approved' ? reference.plan : undefined,
-  });
+  await upsertMercadoPagoPayment({ ...base, ticket_id: ticket.id, amount_cents: amount - partnerShare, mp_payment_id: String(payment.id) });
+  if (partner) {
+    await upsertMercadoPagoPayment({
+      ...base,
+      ticket_id: partner.id,
+      amount_cents: partnerShare,
+      mp_payment_id: `${payment.id}:${partner.code}`,
+    });
+  }
+
+  const planFromPayment = payment.status === 'approved' ? reference.plan : undefined;
+  const updated = await refreshTicket(ticket.id, siteUrl, { planFromPayment });
+  if (partner) await refreshTicket(partner.id, siteUrl, { planFromPayment });
   return { handled: true as const, ticket: updated, paymentStatus: payment.status, code: reference.code };
 }
 
@@ -307,7 +435,14 @@ export async function deliverWhatsApp(
 
 // Manda el mensaje que corresponde al estado actual (entrada, seña o pago pendiente).
 export async function notifyTicket(ticket: Ticket, siteUrl: string) {
-  const built = messageForTicket(ticket, absoluteTicketLinks(siteUrl, ticket.code));
+  // En la promo para dos el mensaje dice con quien va (a la segunda persona le
+  // llega de un numero que quiza no conoce).
+  const partnerCode = duoPartnerCode(ticket);
+  const partner = partnerCode ? await getTicketByCode(partnerCode) : null;
+  const built = messageForTicket(
+    { ...ticket, companionName: partner?.fullName ?? null },
+    absoluteTicketLinks(siteUrl, ticket.code)
+  );
   if (!built) return null;
   return deliverWhatsApp(ticket, ticket.phone, built.kind, built.message);
 }
@@ -539,6 +674,7 @@ export async function handleIncomingWhatsApp(message: IncomingWhatsApp, siteUrl:
   let resent = false;
   const aiText = await generateAiReply(history, context, siteUrl, {
     register: registerFromWhatsApp(phone, siteUrl),
+    registerDuo: registerDuoFromWhatsApp(phone, siteUrl),
     resendTicket: async () => {
       if (!ordered.length) return 'SIN_ENTRADA: este número no tiene entradas. Si pagó con otro número, pedile su código (empieza con M7-).';
       if (resent) return 'YA_ENVIADA: la entrada ya se mandó en este turno.';
@@ -622,6 +758,58 @@ function registerFromWhatsApp(phone: string, siteUrl: string): RegisterFn {
   };
 }
 
+/*
+  Herramienta del bot: promo para dos. Quien escribe queda como compradora y
+  la otra persona con su propio WhatsApp (ahi le llega su QR). Un solo link
+  de pago por las dos entradas.
+*/
+function registerDuoFromWhatsApp(phone: string, siteUrl: string): RegisterDuoFn {
+  return async (fullName, guestName, guestPhoneRaw) => {
+    const name = fullName.trim().replace(/\s+/g, ' ');
+    const guest = guestName.trim().replace(/\s+/g, ' ');
+    if (name.length < 3 || !name.includes(' ')) {
+      return { message: 'FALTA_NOMBRE: pedile su nombre y apellido.', payUrl: null };
+    }
+    if (guest.length < 3 || !guest.includes(' ')) {
+      return { message: 'FALTA_NOMBRE_SEGUNDA: pedile nombre y apellido de la otra persona.', payUrl: null };
+    }
+    const guestPhone = toWhatsAppNumber(guestPhoneRaw);
+    if (!isValidWhatsAppNumber(guestPhone)) {
+      return {
+        message: 'WHATSAPP_INVALIDO: el WhatsApp de la otra persona no es válido. Pedíselo con código de área, sin el 0 y sin el 15 (ej: 11 6445 0430).',
+        payUrl: null,
+      };
+    }
+    if (!hasMercadoPago()) {
+      return {
+        message: 'NO_DISPONIBLE: el pago online todavía no está habilitado. Decile que se habilita en breve y que vuelva a escribir, sin inventar fechas.',
+        payUrl: null,
+      };
+    }
+
+    const result = await prepareDuoTickets({
+      buyer: { fullName: name, phone, email: null },
+      guest: { fullName: guest, phone: guestPhone },
+      origin: 'whatsapp',
+    });
+    if ('error' in result) {
+      const messages: Record<DuoError, string> = {
+        SAME_PHONE: 'MISMO_NUMERO: el WhatsApp de la otra persona es este mismo. Cada entrada va a un WhatsApp distinto (ahí llega el QR): pedile el número de la otra persona.',
+        BUYER_HAS_TICKET: 'YA_TIENE_ENTRADA: este número ya tiene una entrada pagada o señada, así que no se puede usar para la promo para dos. Si la otra persona quiere venir, puede comprar la suya.',
+        GUEST_HAS_TICKET: 'SEGUNDA_YA_TIENE_ENTRADA: la otra persona ya tiene una entrada pagada o señada con ese número. No se creó nada.',
+        SOLD_OUT: 'SIN_LUGAR_PARA_DOS: no quedan 2 lugares. Decíselo con amabilidad; si queda uno, puede comprar su entrada individual.',
+      };
+      return { message: messages[result.error], payUrl: null };
+    }
+
+    const links = absoluteTicketLinks(siteUrl, result.buyer.code);
+    return {
+      message: `OK: promo para dos. Entradas ${result.buyer.code} a nombre de ${name} y ${result.guest.code} a nombre de ${guest} (WhatsApp ${prettyPhone(guestPhone)}). Link para pagar ${DUO_TOTAL_LABEL} por las dos con Mercado Pago: ${links.pay} (mandalo tal cual). Apenas se acredite, a cada una le llega su entrada con QR a su WhatsApp.`,
+      payUrl: links.pay,
+    };
+  };
+}
+
 /* --------------------------------------------------------------- recordatorios */
 
 const REMINDER_EVERY_MS = 3 * 24 * 60 * 60 * 1000;
@@ -657,6 +845,8 @@ export async function runDailyReminders(siteUrl: string, now = new Date()) {
     const links = absoluteTicketLinks(siteUrl, ticket.code);
 
     if (ticket.status === 'PENDIENTE') {
+      // La segunda persona de la promo para dos no paga: el recordatorio le llega a quien compro.
+      if (isDuoGuest(ticket)) return;
       const age = now.getTime() - new Date(ticket.createdAt).getTime();
       if (age < PENDING_REMINDER_AFTER_MS || age > PENDING_REMINDER_UNTIL_MS || today >= eventDay) return;
       if (await hasSentMessageKind(ticket.id, 'PENDIENTE')) return;

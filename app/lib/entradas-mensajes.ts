@@ -10,6 +10,8 @@
 
 import {
   BALANCE_DEADLINE_LABEL,
+  DUO_TOTAL_CENTS,
+  TICKET_PLANS,
   EVENT_ADDRESS,
   EVENT_DATE_LABEL,
   EVENT_HOURS_LABEL,
@@ -28,6 +30,8 @@ export type TicketForMessage = {
   totalCents: number;
   paidCents: number;
   status: string;
+  // Promo para dos: nombre de la otra persona.
+  companionName?: string | null;
 };
 
 export type TicketLinks = { ticket: string; pay: string; image: string };
@@ -44,6 +48,7 @@ export function confirmationMessage(ticket: TicketForMessage, links: TicketLinks
   const text = [
     `${hello(ticket)} 🦋`,
     'Tu entrada para *Metamorfosis 7ma Edición* está confirmada ✅',
+    ticket.companionName ? `Es parte de la promo para dos, junto a *${ticket.companionName}* 💙` : null,
     '',
     `📅 ${EVENT_DATE_LABEL}`,
     `🕚 De ${EVENT_HOURS_LABEL}, los dos días`,
@@ -55,7 +60,9 @@ export function confirmationMessage(ticket: TicketForMessage, links: TicketLinks
     `Tu entrada con QR: ${links.ticket}`,
     '',
     'Guardá este mensaje: el QR se escanea en la puerta.',
-  ].join('\n');
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
 
   return {
     text,
@@ -173,6 +180,29 @@ export const WELCOME_TEXT = [
   'Es un fin de semana para frenar, mirar con honestidad lo que venís cargando y llevarte herramientas concretas para tu día a día. Es en grupo reducido y todo es vivencial: más que escuchar, se vive.',
   '',
   'Para orientarte mejor, ¿qué te llevó a interesarte en el taller?',
+].join('\n');
+
+/*
+  Promo para dos, con el texto de Daiana. La IA lo manda casi tal cual cuando
+  alguien pregunta por venir de a dos; sin IA va en el menu.
+*/
+export const DUO_PROMO_TEXT = [
+  '🦋 *META 7 | UNA EXPERIENCIA PARA COMPARTIR*',
+  '',
+  'Hay experiencias que pueden marcar un antes y un después en nuestra manera de vernos, comprendernos y vincularnos.',
+  'Y hay personas con las que nos gustaría compartir ese camino.',
+  '',
+  'Por eso, para esta nueva edición de Metamorfosis, preparamos una propuesta especial:',
+  '',
+  '✨ *VENÍ CON ALGUIEN Y ACCEDAN A UN VALOR ÚNICO.*',
+  '',
+  `Valor regular: ${formatPesos(TICKET_PLANS.SPLIT.totalCents)} por persona.`,
+  `💙 *PROMO PARA DOS: ${formatPesos(DUO_TOTAL_CENTS)} EN TOTAL.*`,
+  `¡Solo ${formatPesos(TICKET_PLANS.DUO.totalCents)} por persona, abonando al contado!`,
+  '',
+  'Dos personas. Dos procesos personales. Una oportunidad para animarse a vivir algo diferente.',
+  '',
+  '🦋 Metamorfosis 7 — Cupos limitados.',
 ].join('\n');
 
 // Seguimiento unico si la persona dejo de responder (sin insistir).

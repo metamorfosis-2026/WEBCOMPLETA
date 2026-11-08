@@ -35,6 +35,9 @@ import {
 import {
   BALANCE_DEADLINE_LABEL,
   EVENT_DATE_LABEL,
+  DUO_PER_PERSON_LABEL,
+  DUO_TOTAL_LABEL,
+  FULL_DISCOUNT_PERCENT,
   FULL_PRICE_LABEL,
   NEXT_PHASE_PRICE_NOTE,
   SPLIT_INSTALLMENT_LABEL,
@@ -417,7 +420,7 @@ export default function Page() {
     },
     {
       question: '¿Cuánto sale la Fase 1?',
-      answer: `La entrada sale ${FULL_PRICE_LABEL} en un solo pago. Si preferís dividirlo, son ${SPLIT_TOTAL_LABEL} en dos pagos de ${SPLIT_INSTALLMENT_LABEL}: el primero reserva tu lugar y el segundo lo pagás ${BALANCE_DEADLINE_LABEL}. Ese valor es solo por la Fase 1: el fin de semana del 28 y 29 y, además, ${SUPPORT_DETAIL}. ${NEXT_PHASE_PRICE_NOTE} Todo se paga desde esta web con Mercado Pago.`,
+      answer: `El valor regular es de ${SPLIT_TOTAL_LABEL} por persona: señás ${SPLIT_INSTALLMENT_LABEL} para reservar tu lugar y pagás los otros ${SPLIT_INSTALLMENT_LABEL} ${BALANCE_DEADLINE_LABEL}. Pagando hoy en un solo pago sale ${FULL_PRICE_LABEL} (${FULL_DISCOUNT_PERCENT}% off), y si venís con alguien, la promo para dos es de ${DUO_TOTAL_LABEL} por las dos entradas, en un solo pago. Ese valor es solo por la Fase 1: el fin de semana del 28 y 29 y, además, ${SUPPORT_DETAIL}. ${NEXT_PHASE_PRICE_NOTE} Todo se paga desde esta web con Mercado Pago.`,
     },
     {
       question: '¿Qué es la Fase 1?',
@@ -862,10 +865,18 @@ export default function Page() {
                   <MetaLabel>Tu entrada a la Fase 1</MetaLabel>
                 </div>
 
-                <p className="mt-8 text-[13px] uppercase tracking-[0.16em] text-ivory/50">En un solo pago</p>
+                <p className="mt-8 text-[14px] text-ivory/55">
+                  Valor regular <s className="numeric">{SPLIT_TOTAL_LABEL}</s> por persona
+                </p>
+
+                <p className="mt-5 text-[13px] uppercase tracking-[0.16em] text-celeste">Pagando hoy en 1 pago</p>
 
                 <p className="numeric mt-4 text-[3.5rem] font-light leading-none text-white sm:text-[4.5rem]">
                   {FULL_PRICE_LABEL}
+                </p>
+
+                <p className="mt-4 inline-flex rounded-full border border-celeste/40 bg-celeste/10 px-3 py-1 text-[13px] font-semibold text-celeste">
+                  {FULL_DISCOUNT_PERCENT}% off
                 </p>
 
                 <p className="mt-5 text-[15px] text-ivory/50">{EVENT_DATE_LABEL}</p>
@@ -886,13 +897,19 @@ export default function Page() {
                 </div>
 
                 <div className="mx-auto mt-10 max-w-md border-t border-ivory/12 pt-9">
-                  <p className="display-sm text-[1.2rem] text-ivory">¿Preferís pagarlo en dos partes?</p>
+                  <p className="display-sm text-[1.2rem] text-ivory">¿Preferís señar?</p>
                   <p className="mt-4 text-[16px] leading-relaxed text-ivory/70">
-                    Son <span className="font-semibold text-celeste">2 pagos de {SPLIT_INSTALLMENT_LABEL}</span>: el
-                    primero reserva tu lugar y el segundo lo pagás {BALANCE_DEADLINE_LABEL}.
+                    Señás <span className="font-semibold text-celeste">{SPLIT_INSTALLMENT_LABEL}</span> para reservar tu
+                    lugar y pagás los otros {SPLIT_INSTALLMENT_LABEL} {BALANCE_DEADLINE_LABEL}.
                   </p>
-                  <p className="mt-4 text-[13px] leading-relaxed text-ivory/40">
-                    Total en dos pagos: {SPLIT_TOTAL_LABEL}.
+                  <p className="mt-4 text-[13px] leading-relaxed text-ivory/40">Total: {SPLIT_TOTAL_LABEL}.</p>
+                </div>
+
+                <div className="mx-auto mt-9 max-w-md rounded-2xl border border-celeste/30 bg-celeste/[0.05] px-5 py-6">
+                  <p className="display-sm text-[1.2rem] text-ivory">💙 ¿Venís con alguien?</p>
+                  <p className="mt-3 text-[16px] leading-relaxed text-ivory/70">
+                    Promo para dos: <span className="font-semibold text-celeste">{DUO_TOTAL_LABEL} en total</span>, al
+                    contado. Solo {DUO_PER_PERSON_LABEL} por persona.
                   </p>
                 </div>
 

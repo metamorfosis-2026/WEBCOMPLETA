@@ -9,6 +9,7 @@ import { FormSubmitButton } from '@/app/admin/FormSubmitButton';
 import { checkInTicketAction, undoCheckInAction } from '@/app/admin/entradas-actions';
 import {
   BALANCE_DEADLINE_LABEL,
+  DUO_TOTAL_CENTS,
   EVENT_DATE_LABEL,
   EVENT_HOURS_LABEL,
   EVENT_PLACE,
@@ -170,7 +171,11 @@ export default async function TicketPage({
                 href={paths.pay}
                 className="inline-flex min-h-[3.5rem] items-center justify-center rounded-full bg-celeste px-6 text-center text-[13px] font-extrabold uppercase tracking-[0.1em] text-night shadow-[0_18px_44px_-18px_rgba(124,201,236,0.75)] transition hover:bg-white"
               >
-                {ticket.status === 'SENADO' ? `Pagar el saldo · ${formatPesos(due.amountCents)}` : `Completar el pago · ${formatPesos(due.amountCents)}`}
+                {ticket.status === 'SENADO'
+                  ? `Pagar el saldo · ${formatPesos(due.amountCents)}`
+                  : ticket.plan === 'DUO'
+                    ? `Completar el pago · ${formatPesos(DUO_TOTAL_CENTS)} (las 2 entradas)`
+                    : `Completar el pago · ${formatPesos(due.amountCents)}`}
               </a>
               {ticket.status === 'SENADO' ? (
                 <p className="text-center text-[13px] text-ivory/45">

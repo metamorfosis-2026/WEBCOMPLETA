@@ -58,18 +58,25 @@ async function mpFetch<T>(path: string, init?: RequestInit): Promise<T> {
 /* --------------------------------------------------------------- preference */
 
 // La referencia viaja en el pago y nos dice de que entrada y que cuota es.
-export function buildExternalReference(code: string, plan: string, installment: number) {
-  return `${code}:${plan}:${installment}`;
+// En la promo para dos lleva tambien el codigo de la segunda entrada.
+export function buildExternalReference(code: string, plan: string, installment: number, partnerCode?: string | null) {
+  return `${code}:${plan}:${installment}${partnerCode ? `:${partnerCode}` : ''}`;
 }
 
 export function parseExternalReference(reference: string | null | undefined) {
-  const match = String(reference ?? '').match(/^(M7-[A-Z0-9]+):(FULL|SPLIT):(\d)$/i);
+  const match = String(reference ?? '').match(/^(M7-[A-Z0-9]+):(FULL|SPLIT|DUO):(\d)(?::(M7-[A-Z0-9]+))?$/i);
   if (!match) return null;
-  return { code: match[1].toUpperCase(), plan: match[2].toUpperCase() as 'FULL' | 'SPLIT', installment: Number(match[3]) };
+  return {
+    code: match[1].toUpperCase(),
+    plan: match[2].toUpperCase() as 'FULL' | 'SPLIT' | 'DUO',
+    installment: Number(match[3]),
+    partnerCode: match[4] ? match[4].toUpperCase() : null,
+  };
 }
 
 export async function createCheckoutPreference({
   code,
+  partnerCode = null,
   plan,
   installment,
   amountCents,
@@ -83,6 +90,7 @@ export async function createCheckoutPreference({
   notificationUrl,
 }: {
   code: string;
+  partnerCode?: string | null;
   plan: string;
   installment: number;
   amountCents: number;
@@ -114,8 +122,8 @@ export async function createCheckoutPreference({
       surname: rest.join(' '),
       ...(payerEmail ? { email: payerEmail } : {}),
     },
-    external_reference: buildExternalReference(code, plan, installment),
-    metadata: { ticket_code: code, plan, installment },
+    external_reference: buildExternalReference(code, plan, installment, partnerCode),
+    metadata: { ticket_code: code, plan, installment, ...(partnerCode ? { partner_code: partnerCode } : {}) },
     back_urls: { success: successUrl, pending: pendingUrl, failure: failureUrl },
     // MP solo acepta auto_return con URLs https (en local no lo mandamos).
     ...(isHttps ? { auto_return: 'approved' } : {}),

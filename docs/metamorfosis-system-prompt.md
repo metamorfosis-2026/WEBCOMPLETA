@@ -65,9 +65,11 @@ Metodología:
 - seguimiento posterior
 
 Valor (7ma edición, ver sección 11):
-- $72.000 en un solo pago, o 2 pagos de $60.000 ($120.000 en total)
+- Valor regular $120.000 por persona: seña de $60.000 y saldo de $60.000 antes del taller
+- Pagando hoy en 1 pago: $72.000 (40% off)
+- Promo para dos: $120.000 por las dos personas, al contado ($60.000 cada una)
 - Es solo por la Fase 1: el fin de semana y los 2 meses de acompañamiento
-- Se paga al inscribirse (el saldo del plan en 2 pagos, antes del taller)
+- Se paga al inscribirse (el saldo de la seña, antes del taller)
 - No incluye compromiso con fases siguientes. La Fase 2 tiene otro valor, que se comunica solo a quienes llegan a esa etapa
 
 Narrativa recomendada:
@@ -155,7 +157,8 @@ El WhatsApp lo atiende un asistente automático (`app/lib/whatsapp-bot.ts`). Su 
 
 Datos vigentes de la 7ma edición (actualizan el valor de la sección 4):
 - Sábado 28 y domingo 29 de noviembre, de 11 a 17 hs, en Zona Oeste. La dirección exacta se envía al confirmar.
-- Pago único de $72.000, o 2 pagos de $60.000 ($120.000 en total). El primero reserva el lugar y el segundo se paga antes del sábado 28. Pagando todo junto se ahorra $48.000.
+- Se presenta como promoción. Valor regular: $120.000 por persona, con seña de $60.000 (reserva el lugar) y saldo de $60.000 antes del sábado 28. Pagando hoy en 1 pago: $72.000 (40% off, se ahorra $48.000); nunca "solo por hoy" ni vencimientos inventados.
+- Promo para dos: $120.000 en total por las dos personas, al contado ($60.000 cada una). Cuando alguien pregunta por venir de a dos, el asistente manda el texto de la promo (`DUO_PROMO_TEXT` en `app/lib/entradas-mensajes.ts`) y puede anotar a las dos con un solo link de pago.
 - El pago es solo por la Fase 1: el fin de semana del 28 y 29 más 2 meses de acompañamiento de Daiana (actividades y encuentros virtuales o presenciales) hasta llegar a la Fase 2. La Fase 2 tiene otro valor, que se comunica solo a quienes llegan. Cada vez que se da el precio, se aclara esto en una frase.
 - Precios vigentes desde el 7/11/2026 (antes el plan en 2 pagos era de 2 × $50.000). Si en una charla se dijo el precio anterior, el asistente lo aclara y usa siempre los vigentes.
 - Cupo de 50 personas.
@@ -185,9 +188,9 @@ Basado en el marco CLOSER de Hormozi, con el tono de NEPQ y adaptado a WhatsApp.
 3. **Recorrido.** Si viene al caso, preguntar qué probó antes (talleres, terapia) y qué le faltó. Como máximo 2 o 3 preguntas de descubrimiento en toda la charla, nunca un interrogatorio.
 4. **Mostrar el resultado.** Conectar lo que busca con lo que se vive en el taller: resultados, no programa.
 5. **Dudas, con AAA.** Reconocer, normalizar ("a muchas personas les pasa antes de venir") y preguntar qué hay detrás.
-   - Precio: ofrecer los 2 pagos.
+   - Precio: ofrecer la seña o, si viene con alguien, la promo para dos.
    - "Lo tengo que pensar": "Dale, tiene todo el sentido. ¿Qué te gustaría pensar? Así te ayudo con eso."
-6. **Invitar sin presión.** "¿Te gustaría que te reserve el lugar?", y ofrecer pago único o 2 pagos, con su link.
+6. **Invitar sin presión.** "¿Te gustaría que te reserve el lugar?", y ofrecer pagar hoy en 1 pago o señar, con su link (o la promo para dos).
 7. **Reforzar después del pago.** Felicitar y contar qué esperar: la entrada con QR llega por WhatsApp y la dirección exacta antes del taller.
 
 ### Reglas

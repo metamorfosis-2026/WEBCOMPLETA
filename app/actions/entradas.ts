@@ -5,16 +5,19 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { TICKET_CAPACITY } from '@/app/lib/entradas';
-import { startCheckout } from '@/app/lib/entradas-flow';
+import { startCheckout, startDuoCheckout } from '@/app/lib/entradas-flow';
 import { hasMercadoPago } from '@/app/lib/mercadopago';
 import { isValidWhatsAppNumber, toWhatsAppNumber } from '@/app/lib/phone';
 import { getSiteUrl } from '@/app/lib/site';
 import { countSoldTickets } from '@/app/lib/supabase/tickets';
 
 const checkoutSchema = z.object({
-  plan: z.enum(['FULL', 'SPLIT']),
+  plan: z.enum(['FULL', 'SPLIT', 'DUO']),
   fullName: z.string().trim().min(3).max(120),
   phone: z.string().trim().min(6).max(40),
+  // Promo para dos: la segunda persona (le llega su propia entrada a su WhatsApp).
+  guestName: z.string().trim().max(120).optional().or(z.literal('')),
+  guestPhone: z.string().trim().max(40).optional().or(z.literal('')),
   email: z.string().trim().max(160).email().optional().or(z.literal('')),
   source: z.string().trim().max(60).optional().or(z.literal('')),
   // Anti-bots: campo oculto (hp) y cuanto tardo en llenar el formulario.
@@ -27,7 +30,18 @@ const MIN_FILL_MS = 3000;
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 
-export type CheckoutError = 'INVALID' | 'PHONE' | 'SOLD_OUT' | 'PAYMENTS_OFF' | 'FAILED' | 'RETRY';
+export type CheckoutError =
+  | 'INVALID'
+  | 'PHONE'
+  | 'GUEST'
+  | 'GUEST_PHONE'
+  | 'SAME_PHONE'
+  | 'BUYER_HAS_TICKET'
+  | 'GUEST_HAS_TICKET'
+  | 'SOLD_OUT'
+  | 'PAYMENTS_OFF'
+  | 'FAILED'
+  | 'RETRY';
 
 export type CheckoutResult =
   | { ok: true; url: string; code: string; error?: undefined }
@@ -64,20 +78,38 @@ export async function startTicketCheckout(input: CheckoutInput): Promise<Checkou
 
   const phone = toWhatsAppNumber(parsed.data.phone);
   if (!isValidWhatsAppNumber(phone)) return { ok: false, error: 'PHONE' };
+
+  const duo = parsed.data.plan === 'DUO';
+  const guestName = (parsed.data.guestName ?? '').trim().replace(/\s+/g, ' ');
+  const guestPhone = toWhatsAppNumber(parsed.data.guestPhone ?? '');
+  if (duo) {
+    if (guestName.length < 3) return { ok: false, error: 'GUEST' };
+    if (!isValidWhatsAppNumber(guestPhone)) return { ok: false, error: 'GUEST_PHONE' };
+    if (guestPhone === phone) return { ok: false, error: 'SAME_PHONE' };
+  }
   if (!hasMercadoPago()) return { ok: false, error: 'PAYMENTS_OFF' };
 
   try {
     if ((await countSoldTickets()) >= TICKET_CAPACITY) return { ok: false, error: 'SOLD_OUT' };
 
+    const siteUrl = getSiteUrl(requestOrigin());
+    const buyer = {
+      fullName: parsed.data.fullName,
+      phone,
+      email: parsed.data.email ? parsed.data.email.toLowerCase() : null,
+    };
+    const source = parsed.data.source || 'web';
+
+    if (duo) {
+      const result = await startDuoCheckout({ buyer, guest: { fullName: guestName, phone: guestPhone }, origin: source }, siteUrl);
+      if ('error' in result) return { ok: false, error: result.error };
+      revalidatePath('/admin');
+      return { ok: true, url: result.url, code: result.ticket.code };
+    }
+
     const { ticket, url } = await startCheckout(
-      {
-        plan: parsed.data.plan,
-        fullName: parsed.data.fullName,
-        phone,
-        email: parsed.data.email ? parsed.data.email.toLowerCase() : null,
-        source: parsed.data.source || 'web',
-      },
-      getSiteUrl(requestOrigin())
+      { ...buyer, plan: parsed.data.plan === 'SPLIT' ? 'SPLIT' : 'FULL', source },
+      siteUrl
     );
 
     revalidatePath('/admin');

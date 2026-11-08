@@ -2,10 +2,14 @@
   Entradas de la 7ma edicion: precios, fechas y reglas de estado.
   Se usa en cliente y servidor: no importar nada de servidor aca.
 
-  Dos formas de pago:
-  - FULL: un solo pago de $72.000.
-  - SPLIT: $120.000 en dos pagos de $60.000 (el primero reserva el lugar y el
-    saldo se paga antes del sabado 28).
+  El valor regular de la Fase 1 es $120.000 por persona. Formas de pago:
+  - SPLIT: seña de $60.000 (reserva el lugar) y saldo de $60.000 antes del
+    sabado 28.
+  - FULL: pagando hoy en un solo pago, $72.000 (40% off).
+  - DUO: promo para dos, $120.000 en total al contado ($60.000 por persona).
+    Son dos entradas (una por persona, cada una con su WhatsApp y su QR) que
+    se pagan juntas en un solo pago de Mercado Pago. Cada una guarda en
+    `source` el codigo de la otra (ver duoPartnerCode).
 
   Cada entrada guarda su total. Si cambian los precios:
   - la que no tiene ningun pago se cobra con el precio nuevo (repricedTotal);
@@ -14,7 +18,7 @@
 
 import { EDITION_NAME, EDITION_PLACE, FASE1_SCHEDULE, WAITLIST_MAX } from './inscripcion';
 
-export type TicketPlan = 'FULL' | 'SPLIT';
+export type TicketPlan = 'FULL' | 'SPLIT' | 'DUO';
 export type TicketStatus = 'PENDIENTE' | 'SENADO' | 'PAGADO' | 'CANCELADO';
 export type TicketPaymentMethod = 'MERCADO_PAGO' | 'TRANSFERENCIA' | 'EFECTIVO';
 
@@ -27,8 +31,13 @@ export type TicketPlanInfo = {
 
 export const TICKET_PLANS: Record<TicketPlan, TicketPlanInfo> = {
   FULL: { id: 'FULL', label: 'Pago único', totalCents: 7_200_000, installmentsCents: [7_200_000] },
-  SPLIT: { id: 'SPLIT', label: 'En 2 pagos', totalCents: 12_000_000, installmentsCents: [6_000_000, 6_000_000] },
+  SPLIT: { id: 'SPLIT', label: 'Seña + saldo', totalCents: 12_000_000, installmentsCents: [6_000_000, 6_000_000] },
+  // Por persona: la compra de a dos son 2 entradas de estas, pagadas juntas.
+  DUO: { id: 'DUO', label: 'Promo para dos', totalCents: 6_000_000, installmentsCents: [6_000_000] },
 };
+
+// Lo que se paga en total por la promo para dos (las 2 entradas).
+export const DUO_TOTAL_CENTS = TICKET_PLANS.DUO.totalCents * 2;
 
 // Precios anteriores del plan en 2 pagos (primer pago -> total). Hasta el
 // 7/11/2026 eran 2 x $50.000 = $100.000.
@@ -70,7 +79,9 @@ export const FLYER_PATH = '/entradas/flyer-7ma.jpg';
 // Numero del WhatsApp Business (solo digitos), para los botones "escribinos".
 export const BUSINESS_WHATSAPP_NUMBER = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '').replace(/\D+/g, '');
 
-export function isTicketPlan(value: unknown): value is TicketPlan {
+// Planes de una sola entrada (el admin solo carga estos; la promo para dos
+// siempre crea las 2 entradas juntas).
+export function isTicketPlan(value: unknown): value is 'FULL' | 'SPLIT' {
   return value === 'FULL' || value === 'SPLIT';
 }
 
@@ -83,6 +94,31 @@ export const SPLIT_TOTAL_LABEL = formatPesos(TICKET_PLANS.SPLIT.totalCents);
 export const SPLIT_INSTALLMENT_LABEL = formatPesos(TICKET_PLANS.SPLIT.installmentsCents[0]);
 // Lo que se ahorra pagando todo junto frente al plan en 2 pagos.
 export const FULL_SAVINGS_LABEL = formatPesos(TICKET_PLANS.SPLIT.totalCents - TICKET_PLANS.FULL.totalCents);
+// Valor regular por persona (el de seña + saldo) y descuento del pago unico.
+export const REGULAR_PRICE_LABEL = SPLIT_TOTAL_LABEL;
+export const FULL_DISCOUNT_PERCENT = Math.round((1 - TICKET_PLANS.FULL.totalCents / TICKET_PLANS.SPLIT.totalCents) * 100);
+export const DUO_TOTAL_LABEL = formatPesos(DUO_TOTAL_CENTS);
+export const DUO_PER_PERSON_LABEL = formatPesos(TICKET_PLANS.DUO.totalCents);
+
+/*
+  Entradas de la promo para dos: cada una guarda en `source` el codigo de la
+  otra. La que compra: "<origen> · promo para dos con M7-XXXX". La otra:
+  "promo para dos de M7-XXXX" (no le mandamos el recordatorio de pago: paga
+  quien compro).
+*/
+export function duoBuyerSource(origin: string, partnerCode: string) {
+  return `${origin} · promo para dos con ${partnerCode}`;
+}
+export function duoGuestSource(buyerCode: string) {
+  return `promo para dos de ${buyerCode}`;
+}
+export function duoPartnerCode(ticket: { plan: TicketPlan; source: string | null }) {
+  if (ticket.plan !== 'DUO') return null;
+  return ticket.source?.match(/promo para dos (?:con|de) (M7-[2-9A-HJ-NP-Z]{8})\b/)?.[1] ?? null;
+}
+export function isDuoGuest(ticket: { plan: TicketPlan; source: string | null }) {
+  return ticket.plan === 'DUO' && /^promo para dos de M7-/.test(ticket.source ?? '');
+}
 
 export function computeTicketStatus(totalCents: number, paidCents: number, cancelled = false): TicketStatus {
   if (cancelled) return 'CANCELADO';

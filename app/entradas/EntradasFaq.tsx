@@ -1,5 +1,8 @@
 import {
   BALANCE_DEADLINE_LABEL,
+  DUO_PER_PERSON_LABEL,
+  DUO_TOTAL_LABEL,
+  FULL_DISCOUNT_PERCENT,
   EVENT_PLACE,
   FULL_PRICE_LABEL,
   SPLIT_INSTALLMENT_LABEL,
@@ -34,8 +37,12 @@ const FAQ = [
     answer: `Es presencial, en ${EVENT_PLACE}. La dirección exacta te la mandamos por WhatsApp al confirmar tu entrada.`,
   },
   {
-    question: '¿Cómo es el plan en 2 pagos?',
-    answer: `Son ${SPLIT_TOTAL_LABEL} en dos pagos de ${SPLIT_INSTALLMENT_LABEL}. El primero reserva tu lugar y el segundo lo pagás ${BALANCE_DEADLINE_LABEL}, con el link que te llega por WhatsApp. En un solo pago sale ${FULL_PRICE_LABEL}.`,
+    question: '¿Cómo funciona la seña?',
+    answer: `El valor regular es de ${SPLIT_TOTAL_LABEL} por persona: señás ${SPLIT_INSTALLMENT_LABEL} para reservar tu lugar y pagás los otros ${SPLIT_INSTALLMENT_LABEL} ${BALANCE_DEADLINE_LABEL}, con el link que te llega por WhatsApp. Pagando hoy en un solo pago sale ${FULL_PRICE_LABEL} (${FULL_DISCOUNT_PERCENT}% off).`,
+  },
+  {
+    question: '¿Hay promo para dos?',
+    answer: `Sí. Si venís con alguien, las dos entradas salen ${DUO_TOTAL_LABEL} en total, en un solo pago (${DUO_PER_PERSON_LABEL} por persona). Elegí "¿Son 2?", completá los datos de las dos personas y a cada una le llega su entrada con QR a su WhatsApp.`,
   },
 ];
 

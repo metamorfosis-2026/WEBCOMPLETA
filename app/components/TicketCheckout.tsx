@@ -7,12 +7,15 @@ import { startTicketCheckout, type CheckoutError } from '@/app/actions/entradas'
 import { CheckIcon, LockIcon, QrIcon } from '@/app/entradas/icons';
 import {
   BALANCE_DEADLINE_LABEL,
+  DUO_PER_PERSON_LABEL,
+  DUO_TOTAL_LABEL,
   EVENT_DATE_LABEL,
   EVENT_HOURS_LABEL,
   EVENT_PLACE,
+  FULL_DISCOUNT_PERCENT,
   FULL_PRICE_LABEL,
-  FULL_SAVINGS_LABEL,
   NEXT_PHASE_PRICE_NOTE,
+  REGULAR_PRICE_LABEL,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
   SUPPORT_LABEL,
@@ -27,6 +30,12 @@ type ErrorCode = CheckoutError | 'NETWORK' | 'NO_URL';
 const ERROR_TEXT: Record<ErrorCode, string> = {
   INVALID: 'Revisá tu nombre y tu email.',
   PHONE: 'Revisá tu WhatsApp: código de área sin el 0 y el número sin el 15 (ej: 11 6445 0430).',
+  GUEST: 'Escribí el nombre y apellido de la segunda persona.',
+  GUEST_PHONE: 'Revisá el WhatsApp de la segunda persona: código de área sin el 0 y el número sin el 15.',
+  SAME_PHONE: 'Cada entrada llega a un WhatsApp distinto: poné el número de la segunda persona.',
+  BUYER_HAS_TICKET:
+    'Tu WhatsApp ya tiene una entrada pagada. Para la promo para dos usen dos números sin entrada, o que la otra persona compre la suya.',
+  GUEST_HAS_TICKET: 'La segunda persona ya tiene una entrada pagada con ese WhatsApp.',
   SOLD_OUT: 'Se agotaron las entradas de esta edición. Escribinos por Instagram y te sumamos a la lista de espera.',
   PAYMENTS_OFF: 'El pago online todavía no está habilitado. Escribinos por Instagram y te pasamos cómo pagar.',
   FAILED: 'No pudimos abrir Mercado Pago. Probá de nuevo en un momento.',
@@ -39,24 +48,60 @@ const ERROR_TEXT: Record<ErrorCode, string> = {
 // Si a los 6 s el navegador sigue en la pagina, mostramos el link a mano.
 const REDIRECT_FALLBACK_MS = 6000;
 
-// `amount` y `times`: el precio partido para la opcion angosta del celular
-// ("2×" chico al lado del monto, asi nunca se corta en dos lineas).
-const PLAN_COPY: Record<TicketPlan, { title: string; detail: string; price: string; amount: string; times?: string; note: string }> = {
+/*
+  Promocion: valor regular $120.000 por persona (seña + saldo), $72.000
+  pagando hoy en 1 pago y la promo para dos.
+  `title`: corto, para la opcion angosta del celular; `longTitle`: escritorio.
+  `amount` y `times`: el precio partido para el celular ("2×" chico al lado
+  del monto, asi nunca se corta en dos lineas). `was`: precio tachado.
+*/
+type PlanCopy = {
+  title: string;
+  longTitle: string;
+  detail: string;
+  price: string;
+  amount: string;
+  times?: string;
+  was?: string;
+  note: string;
+  highlight?: boolean;
+};
+
+const PLAN_COPY: Record<TicketPlan, PlanCopy> = {
   FULL: {
-    title: 'Pago único',
-    detail: 'Pagás todo hoy y listo.',
+    title: 'Pagá hoy',
+    longTitle: 'Pagá hoy',
+    detail: `En 1 pago: ${FULL_PRICE_LABEL} en vez de ${REGULAR_PRICE_LABEL}.`,
     price: FULL_PRICE_LABEL,
     amount: FULL_PRICE_LABEL,
-    note: `Ahorrás ${FULL_SAVINGS_LABEL}`,
+    was: REGULAR_PRICE_LABEL,
+    note: `${FULL_DISCOUNT_PERCENT}% off`,
+    highlight: true,
   },
   SPLIT: {
-    title: 'En 2 pagos',
-    detail: `Hoy ${SPLIT_INSTALLMENT_LABEL} y el resto ${BALANCE_DEADLINE_LABEL}.`,
+    title: 'Seña + saldo',
+    longTitle: 'Seña + saldo',
+    detail: `Señás ${SPLIT_INSTALLMENT_LABEL} hoy y ${SPLIT_INSTALLMENT_LABEL} ${BALANCE_DEADLINE_LABEL}.`,
     price: `2 × ${SPLIT_INSTALLMENT_LABEL}`,
     amount: SPLIT_INSTALLMENT_LABEL,
     times: '2×',
     note: `Total ${SPLIT_TOTAL_LABEL}`,
   },
+  DUO: {
+    title: '¿Son 2?',
+    longTitle: '¿Son 2?',
+    detail: 'Promo para dos: 2 entradas en 1 pago, cada una con su QR.',
+    price: DUO_TOTAL_LABEL,
+    amount: DUO_TOTAL_LABEL,
+    note: `${DUO_PER_PERSON_LABEL} por persona`,
+    highlight: true,
+  },
+};
+
+const FIRST_PAYMENT: Record<TicketPlan, string> = {
+  FULL: FULL_PRICE_LABEL,
+  SPLIT: SPLIT_INSTALLMENT_LABEL,
+  DUO: DUO_TOTAL_LABEL,
 };
 
 const labelClass = 'block text-[14px] font-medium text-ivory/90';
@@ -90,6 +135,8 @@ export function TicketCheckout({
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const [honeypot, setHoneypot] = useState('');
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<ErrorCode | null>(null);
@@ -102,6 +149,8 @@ export function TicketCheckout({
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const guestNameRef = useRef<HTMLInputElement>(null);
+  const guestPhoneRef = useRef<HTMLInputElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -136,8 +185,13 @@ export function TicketCheckout({
   const nameOk = fullName.trim().length >= 3;
   const phoneOk = isValidWhatsAppNumber(waNumber);
   const emailOk = !email.trim() || /^\S+@\S+\.\S+$/.test(email.trim());
-  const isValid = nameOk && phoneOk && emailOk;
-  const firstPayment = plan === 'FULL' ? FULL_PRICE_LABEL : SPLIT_INSTALLMENT_LABEL;
+  const duo = plan === 'DUO';
+  const guestWa = useMemo(() => toWhatsAppNumber(guestPhone), [guestPhone]);
+  const guestNameOk = !duo || guestName.trim().length >= 3;
+  const guestPhoneValid = isValidWhatsAppNumber(guestWa);
+  const guestPhoneOk = !duo || (guestPhoneValid && guestWa !== waNumber);
+  const isValid = nameOk && phoneOk && emailOk && guestNameOk && guestPhoneOk;
+  const firstPayment = FIRST_PAYMENT[plan];
   const redirecting = Boolean(redirectUrl);
   const busy = isPending || redirecting;
   const showErrors = touched;
@@ -151,9 +205,11 @@ export function TicketCheckout({
       ? 'Abriendo Mercado Pago…'
       : isPending
         ? 'Preparando tu entrada…'
-        : plan === 'FULL'
-          ? `Pagar ${firstPayment}`
-          : `Reservar con ${firstPayment}`;
+        : plan === 'SPLIT'
+          ? `Señar con ${firstPayment}`
+          : duo
+            ? `Pagar ${firstPayment} · 2 entradas`
+            : `Pagar ${firstPayment}`;
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -163,7 +219,9 @@ export function TicketCheckout({
     if (!isValid) {
       // Llevamos a la persona al primer dato que falta, al centro de la pantalla:
       // con el scroll normal del foco quedaba tapado por la barra fija del celular.
-      const target = (!nameOk ? nameRef : !phoneOk ? phoneRef : emailRef).current;
+      const target = (
+        !nameOk ? nameRef : !phoneOk ? phoneRef : !emailOk ? emailRef : !guestNameOk ? guestNameRef : guestPhoneRef
+      ).current;
       target?.focus({ preventScroll: true });
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -177,6 +235,7 @@ export function TicketCheckout({
           fullName: fullName.trim(),
           phone: waNumber,
           email: email.trim(),
+          ...(duo ? { guestName: guestName.trim(), guestPhone: guestWa } : {}),
           source,
           hp: honeypot,
           elapsedMs: Date.now() - mountedAt.current,
@@ -205,6 +264,10 @@ export function TicketCheckout({
     email: `${ids}-email`,
     emailHint: `${ids}-email-ayuda`,
     nameError: `${ids}-nombre-error`,
+    guestName: `${ids}-segunda-nombre`,
+    guestNameError: `${ids}-segunda-nombre-error`,
+    guestPhone: `${ids}-segunda-whatsapp`,
+    guestPhoneHint: `${ids}-segunda-whatsapp-ayuda`,
   };
 
   return (
@@ -223,7 +286,10 @@ export function TicketCheckout({
         {isPage ? (
           <div className={center}>
             <h2 className="display-sm text-[1.6rem] leading-tight text-white">Reservá tu lugar</h2>
-            <p className="mt-1 text-[15px] text-ivory/70 [text-wrap:balance] lg:mt-1.5">Elegí cómo pagar y completá tus datos.</p>
+            <p className="mt-1 text-[15px] text-ivory/70 [text-wrap:balance] lg:mt-1.5">
+              Valor regular: <span className="font-semibold text-ivory/90">{REGULAR_PRICE_LABEL}</span> por persona. Elegí
+              cómo pagar.
+            </p>
           </div>
         ) : null}
 
@@ -251,11 +317,17 @@ export function TicketCheckout({
                 esquina. El radio sigue ahi, invisible, para teclado y lectores
                 de pantalla. En escritorio, la fila de siempre con el radio a la izquierda.
               */
+              const noteClass = copy.highlight ? 'text-celeste' : 'text-ivory/65';
+              const was = copy.was ? <s className="mr-1.5 font-normal text-ivory/45">{copy.was}</s> : null;
+
               if (isPage) {
+                const wide = id === 'DUO';
                 return (
                   <label
                     key={id}
-                    className={`relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border px-2 pb-3.5 pt-3 text-center transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-celeste/70 lg:flex-row lg:justify-start lg:gap-4 lg:px-5 lg:py-4 lg:text-left lg:shadow-none ${
+                    className={`relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border text-center transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-celeste/70 lg:col-span-1 lg:flex-row lg:justify-start lg:gap-4 lg:px-5 lg:py-4 lg:text-left lg:shadow-none ${
+                      wide ? 'col-span-2 px-4 py-3' : 'px-2 pb-3.5 pt-3'
+                    } ${
                       active
                         ? 'border-celeste bg-celeste/[0.08] shadow-[0_0_0_1px_rgba(124,201,236,0.55),0_14px_40px_-14px_rgba(124,201,236,0.6)]'
                         : 'border-ivory/15 [@media(hover:hover)]:hover:border-ivory/35'
@@ -273,17 +345,32 @@ export function TicketCheckout({
                       </span>
                     ) : null}
 
-                    {/* celular */}
-                    <span className="flex flex-col items-center lg:hidden">
-                      <span className="text-[14px] font-semibold text-ivory/90">{copy.title}</span>
-                      <span className="numeric mt-0.5 flex items-baseline whitespace-nowrap font-semibold leading-tight text-white">
-                        {copy.times ? <span className="mr-1 text-[15px] text-ivory/75">{copy.times}</span> : null}
-                        <span className="text-[1.6rem] min-[380px]:text-[1.75rem]">{copy.amount}</span>
+                    {/* celular: la promo para dos va a lo ancho, en una fila */}
+                    {wide ? (
+                      <span className="flex w-full items-center justify-between gap-2 pr-5 text-left lg:hidden">
+                        <span className="min-w-0 whitespace-nowrap">
+                          <span className="block text-[14px] font-semibold text-white min-[380px]:text-[15px]">
+                            {copy.title} <span className="text-celeste">Promo para dos</span>
+                          </span>
+                          <span className="block text-[13px] text-ivory/65">{DUO_PER_PERSON_LABEL} c/u · 2 entradas</span>
+                        </span>
+                        <span className="numeric flex-none text-[1.4rem] font-semibold leading-tight text-white min-[380px]:text-[1.6rem]">
+                          {copy.amount}
+                        </span>
                       </span>
-                      <span className={`mt-0.5 text-[13px] font-medium ${id === 'FULL' ? 'text-celeste' : 'text-ivory/65'}`}>
-                        {copy.note}
+                    ) : (
+                      <span className="flex flex-col items-center lg:hidden">
+                        <span className="text-[14px] font-semibold text-ivory/90">{copy.title}</span>
+                        <span className="numeric mt-0.5 flex items-baseline whitespace-nowrap font-semibold leading-tight text-white">
+                          {copy.times ? <span className="mr-1 text-[15px] text-ivory/75">{copy.times}</span> : null}
+                          <span className="text-[1.6rem] min-[380px]:text-[1.75rem]">{copy.amount}</span>
+                        </span>
+                        <span className={`mt-0.5 whitespace-nowrap text-[13px] font-medium ${noteClass}`}>
+                          {was}
+                          {copy.note}
+                        </span>
                       </span>
-                    </span>
+                    )}
 
                     {/* escritorio */}
                     <span
@@ -295,12 +382,15 @@ export function TicketCheckout({
                       {active ? <span className="h-2.5 w-2.5 rounded-full bg-celeste" /> : null}
                     </span>
                     <span className="hidden min-w-0 flex-1 lg:block">
-                      <span className="block text-[16px] font-semibold text-white">{copy.title}</span>
+                      <span className="block text-[16px] font-semibold text-white">{copy.longTitle}</span>
                       <span className="mt-0.5 block text-[14px] leading-snug text-ivory/70">{copy.detail}</span>
                     </span>
                     <span className="hidden flex-none text-right lg:block">
                       <span className="numeric block text-[1.55rem] font-medium leading-tight text-white">{copy.price}</span>
-                      <span className={`block text-[13px] ${id === 'FULL' ? 'text-celeste' : 'text-ivory/60'}`}>{copy.note}</span>
+                      <span className={`block whitespace-nowrap text-[13px] ${noteClass}`}>
+                        {was}
+                        {copy.note}
+                      </span>
                     </span>
                   </label>
                 );
@@ -323,14 +413,15 @@ export function TicketCheckout({
                     {active ? <span className="h-2.5 w-2.5 rounded-full bg-celeste" /> : null}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[16px] font-semibold text-white">{copy.title}</span>
+                    <span className="block text-[16px] font-semibold text-white">{copy.longTitle}</span>
                     <span className="mt-0.5 block text-[14px] leading-snug text-ivory/70">{copy.detail}</span>
                   </span>
                   <span className="flex-none text-right">
                     <span className="numeric block text-[1.4rem] font-medium leading-tight text-white sm:text-[1.55rem]">
                       {copy.price}
                     </span>
-                    <span className={`block text-[13px] ${id === 'FULL' ? 'text-celeste' : 'text-ivory/60'}`}>
+                    <span className={`block whitespace-nowrap text-[13px] ${noteClass}`}>
+                      {was}
                       {copy.note}
                     </span>
                   </span>
@@ -347,7 +438,9 @@ export function TicketCheckout({
         {/* Que cubre el pago: solo la Fase 1 (fin de semana + 2 meses de
             acompanamiento). La Fase 2 se paga aparte y su valor no se publica. */}
         <div className={`${isPage ? 'mt-4 lg:mt-5' : 'mt-5'} rounded-xl border border-ivory/10 bg-white/[0.03] px-4 py-3.5${center}`}>
-          <p className="text-[14px] font-semibold text-white">Tu pago es solo por la Fase 1 e incluye:</p>
+          <p className="text-[14px] font-semibold text-white">
+            {duo ? 'Cada entrada es solo por la Fase 1 e incluye:' : 'Tu pago es solo por la Fase 1 e incluye:'}
+          </p>
           <ul
             className={`mt-2 grid gap-1.5 text-left text-[14px] leading-snug text-ivory/80${
               isPage ? ' mx-auto w-fit max-w-full lg:mx-0' : ''
@@ -443,6 +536,65 @@ export function TicketCheckout({
             </p>
           </div>
 
+          {/* Promo para dos: la segunda persona, con su propio WhatsApp (ahi le llega su entrada). */}
+          {duo ? (
+            <div className={`rounded-2xl border border-celeste/30 bg-celeste/[0.04] p-4 lg:p-5${center}`}>
+              <p className="text-[15px] font-semibold text-white">Segunda persona</p>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-ivory/60 [text-wrap:balance]">
+                Le llega su propia entrada con QR a su WhatsApp.
+              </p>
+
+              <label htmlFor={fieldIds.guestName} className={`${labelClass} mt-4`}>
+                Nombre y apellido
+              </label>
+              <input
+                ref={guestNameRef}
+                id={fieldIds.guestName}
+                className={`${inputClass(showErrors && !guestNameOk, isPage)}${center}`}
+                placeholder="Ana Gómez"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                autoComplete="off"
+                enterKeyHint="next"
+                aria-invalid={showErrors && !guestNameOk}
+                aria-describedby={showErrors && !guestNameOk ? fieldIds.guestNameError : undefined}
+              />
+              {showErrors && !guestNameOk ? (
+                <p id={fieldIds.guestNameError} className={errorTextClass}>
+                  {ERROR_TEXT.GUEST}
+                </p>
+              ) : null}
+
+              <label htmlFor={fieldIds.guestPhone} className={`${labelClass} mt-4`}>
+                Su WhatsApp
+              </label>
+              <input
+                ref={guestPhoneRef}
+                id={fieldIds.guestPhone}
+                className={`${inputClass(showErrors && !guestPhoneOk, isPage)}${center}`}
+                placeholder="11 2345 6789"
+                value={guestPhone}
+                onChange={(e) => setGuestPhone(e.target.value)}
+                inputMode="tel"
+                autoComplete="off"
+                enterKeyHint="send"
+                aria-invalid={showErrors && !guestPhoneOk}
+                aria-describedby={fieldIds.guestPhoneHint}
+              />
+              <p id={fieldIds.guestPhoneHint} className={showErrors && !guestPhoneOk ? errorTextClass : hintClass}>
+                {showErrors && !guestPhoneOk ? (
+                  guestPhoneValid ? ERROR_TEXT.SAME_PHONE : ERROR_TEXT.GUEST_PHONE
+                ) : guestPhoneValid && guestWa !== waNumber ? (
+                  <>
+                    Su entrada llega a <span className="font-medium text-celeste">{prettyPhone(guestWa)}</span>
+                  </>
+                ) : (
+                  'Código de área sin el 0 y el número sin el 15.'
+                )}
+              </p>
+            </div>
+          ) : null}
+
           {/* Anti-bots: invisible, sin label y con un nombre que el autocompletado
               no reconoce. Si igual se llena, el servidor lo usa solo como senal. */}
           <input
@@ -520,7 +672,11 @@ export function TicketCheckout({
           <div className="mx-auto w-full max-w-xl px-5 pb-3 pt-2.5">
             <p className="truncate text-center leading-tight" aria-live="polite">
               <span className="align-middle text-[13px] text-ivory/70">
-                {plan === 'FULL' ? 'Pago único' : `1 de 2 pagos · total ${SPLIT_TOTAL_LABEL}`}
+                {plan === 'FULL'
+                  ? `Hoy en 1 pago · ${FULL_DISCOUNT_PERCENT}% off`
+                  : plan === 'SPLIT'
+                    ? `Seña · total ${SPLIT_TOTAL_LABEL}`
+                    : 'Promo para dos · 2 entradas'}
               </span>
               <span className="numeric ml-2 align-middle text-[1.35rem] font-semibold text-white">{firstPayment}</span>
             </p>
@@ -537,9 +693,11 @@ export function TicketCheckout({
                   ? 'Abriendo…'
                   : isPending
                     ? 'Preparando…'
-                    : plan === 'FULL'
-                      ? 'Pagar'
-                      : 'Reservar'}
+                    : plan === 'SPLIT'
+                      ? 'Señar'
+                      : duo
+                        ? 'Pagar 2 entradas'
+                        : 'Pagar'}
             </button>
           </div>
         </div>

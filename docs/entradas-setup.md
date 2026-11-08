@@ -2,8 +2,11 @@
 
 Sábado 28 y domingo 29 de noviembre · de 11 a 17 hs · hasta 50 lugares.
 
-- **Pago único:** $72.000
-- **En 2 pagos:** $120.000 (2 × $60.000). El primero ($60.000) reserva el lugar y el saldo ($60.000) se paga antes del sábado 28. Pagando todo junto se ahorra $48.000.
+Valor regular de la Fase 1: $120.000 por persona. Se presenta como promoción:
+
+- **Seña + saldo** (plan `SPLIT`): seña de $60.000 que reserva el lugar y saldo de $60.000 antes del sábado 28 ($120.000).
+- **Pagando hoy en 1 pago** (plan `FULL`): $72.000 (40% off, se ahorra $48.000). Es "pagando hoy", sin vencimiento: no se dice "solo por hoy".
+- **Promo para dos** (plan `DUO`, opción "¿Son 2?" en la web o por el bot): $120.000 por las dos personas en 1 pago ($60.000 cada una). Se crean 2 entradas, una por persona con su WhatsApp, y se pagan juntas con un solo checkout. Cada entrada guarda en `source` el código de la otra ("promo para dos con M7-…" la de quien compra, "promo para dos de M7-…" la de la otra persona). Al acreditarse el pago se registra la mitad en cada entrada (la segunda con id `<payment_id>:<código>`) y a cada una le llega su QR. Si una de las dos se paga aparte o cambia de forma de pago, la otra pasa a pago único.
 
 Precios y fechas: `app/lib/entradas.ts`. Todo lo demás (web, WhatsApp, Mercado Pago, admin) los toma de ahí.
 

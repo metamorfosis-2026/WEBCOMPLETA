@@ -72,7 +72,7 @@ function mapTicket(row: DbTicket) {
     fullName: row.full_name,
     phone: row.phone,
     email: row.email,
-    plan: (row.plan === 'SPLIT' ? 'SPLIT' : 'FULL') as TicketPlan,
+    plan: (row.plan === 'SPLIT' || row.plan === 'DUO' ? row.plan : 'FULL') as TicketPlan,
     totalCents: row.total_cents,
     paidCents: row.paid_cents,
     status: row.status as TicketStatus,
