@@ -218,6 +218,59 @@ body {
   animation: aura-breathe 11s ease-in-out infinite;
 }
 
+/* Fondo con movimiento liviano (ver SplineBackground): dos halos que se
+   desplazan despacio. Solo se anima transform, sin blur: lo mueve la placa
+   de video y casi no gasta bateria. */
+.bg-motion {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.bg-motion::before,
+.bg-motion::after {
+  content: '';
+  position: absolute;
+  border-radius: 9999px;
+  will-change: transform;
+}
+
+.bg-motion::before {
+  width: 90vmax;
+  height: 90vmax;
+  left: -35vmax;
+  top: -30vmax;
+  background: radial-gradient(circle, rgba(124, 201, 236, 0.42) 0%, rgba(124, 201, 236, 0.12) 40%, transparent 68%);
+  animation: bg-drift-a 16s ease-in-out infinite alternate;
+}
+
+.bg-motion::after {
+  width: 80vmax;
+  height: 80vmax;
+  right: -35vmax;
+  top: 15vh;
+  background: radial-gradient(circle, rgba(62, 159, 203, 0.38) 0%, rgba(62, 159, 203, 0.1) 40%, transparent 68%);
+  animation: bg-drift-b 21s ease-in-out infinite alternate;
+}
+
+@keyframes bg-drift-a {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(22vw, 26vh, 0) scale(1.18);
+  }
+}
+
+@keyframes bg-drift-b {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.1);
+  }
+  to {
+    transform: translate3d(-24vw, 20vh, 0) scale(0.92);
+  }
+}
+
 /* Carrusel infinito de testimonios.
    Los items llevan margin-right (no gap): así el -50% del track cae exacto
    sobre la segunda copia y el bucle no tiene salto. */
@@ -385,6 +438,8 @@ body {
   video,
   .meta-title-motion,
   .aura-breathe,
+  .bg-motion::before,
+  .bg-motion::after,
   .brand-logo,
   .glow-pulse,
   .marquee-track {
