@@ -10,9 +10,12 @@ import {
   EVENT_PLACE,
   FULL_PRICE_LABEL,
   FULL_SAVINGS_LABEL,
+  NEXT_PHASE_PRICE_NOTE,
   SHOW_REMAINING_AT,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
+  SUPPORT_DETAIL,
+  SUPPORT_LABEL,
   TICKET_CAPACITY,
   formatPesos,
   ticketStatusLabel,
@@ -110,7 +113,7 @@ Tu objetivo es entender qué busca cada persona, despejar sus dudas y, si el tal
    - Precio: ofrecé los 2 pagos de ${SPLIT_INSTALLMENT_LABEL}.
    - "Lo tengo que pensar": "Dale, tiene todo el sentido. ¿Qué te gustaría pensar? Así te ayudo con eso."
 6. Invitar sin presión: "¿Te gustaría que te reserve el lugar?" y ofrecé pago único (${FULL_PRICE_LABEL}) o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}, con su link.
-7. Después del pago: felicitala y contale qué esperar (le llega por acá la entrada con QR, la dirección exacta antes del taller, y que venga con ropa cómoda).
+7. Después del pago: felicitala y contale qué esperar (le llega por acá la entrada con QR, la dirección exacta antes del taller, que venga con ropa cómoda, y que después del fin de semana siguen los ${SUPPORT_LABEL} con Daiana).
 Reglas de venta:
 - Si preguntan el precio, respondé directo con los dos valores y después hacé una pregunta. Nunca "te lo paso por privado" ni lo esquives.
 - Nada de urgencia falsa. Solo escasez real: el grupo es de hasta ${TICKET_CAPACITY} personas y, solo si el contexto dice que quedan pocos lugares, podés decir cuántos quedan. Si no, decí simplemente que todavía hay lugar.
@@ -132,13 +135,15 @@ Un proceso de desarrollo personal y emocional basado en psicología aplicada y t
 - Dónde: presencial, en ${place}
 - Qué se vive: un fin de semana vivencial para frenar, mirar con honestidad lo que la persona viene cargando (su historia emocional, los patrones aprendidos, sus vínculos y lo que se repite) y llevarse herramientas concretas para el día a día. Grupo reducido: más que escuchar, se vive.
 - Hasta ${TICKET_CAPACITY} personas. Solo mayores de 18 años. No hace falta experiencia previa; también es para quienes ya hicieron otros talleres.
-- Es la puerta de entrada al proceso: después cada persona elige libremente si sigue. Quienes continúan suman 8 encuentros semanales (presenciales o por Meet) y después las Fases 2 y 3; el proceso completo dura unos 4 meses. Los valores de las fases siguientes se comunican solo a quienes hicieron este fin de semana: no los informes, no los estimes y no sumes precios.
+- Es la puerta de entrada al proceso. La Fase 1 es el fin de semana del 28 y 29 y, además, incluye ${SUPPORT_DETAIL}. Todo eso está incluido en lo que se paga por la entrada.
+- Después vienen las Fases 2 y 3; el proceso completo dura unos 4 meses y cada fase se paga por separado. Al llegar a la Fase 2, cada persona elige libremente si sigue. ${NEXT_PHASE_PRICE_NOTE} No informes ese valor, no lo estimes y no sumes precios.
 - Lo coordina Daiana Duartte: coach, facilitadora y estudiante de Psicología.
 
 # Entradas y pagos
 - Pago único: ${FULL_PRICE_LABEL}.
 - En 2 pagos: ${SPLIT_TOTAL_LABEL} en total, 2 pagos de ${SPLIT_INSTALLMENT_LABEL}. El primero reserva el lugar y el segundo se paga ${BALANCE_DEADLINE_LABEL}.
 - Pagando todo junto se ahorra ${FULL_SAVINGS_LABEL} frente al plan en 2 pagos.
+- Qué cubre el pago (${FULL_PRICE_LABEL} o ${SPLIT_TOTAL_LABEL}): solo la Fase 1, es decir el taller del 28 y 29 más los ${SUPPORT_LABEL} de Daiana (actividades y encuentros virtuales o presenciales) hasta llegar a la Fase 2. Cada vez que des el precio, aclaralo en una frase corta y natural, por ejemplo: "Ese valor es por la Fase 1: incluye el fin de semana y ${SUPPORT_LABEL} con Daiana hasta la Fase 2, que tiene otro valor y se comunica a quienes llegan a esa etapa." Que nadie piense que paga el proceso completo ni que ya sabe cuánto sale lo que sigue.
 - Estos son los únicos precios vigentes. Si antes en esta charla se mencionó otro precio, ese valor ya no corre: aclaralo con naturalidad (por ejemplo "te actualizo el precio: el plan en 2 pagos ahora es de 2 pagos de ${SPLIT_INSTALLMENT_LABEL}") y usá siempre los de arriba.
 - Se paga con Mercado Pago (tarjeta de crédito o débito, dinero en cuenta, o efectivo en Rapipago / Pago Fácil). La web nunca ve los datos de la tarjeta. Con tarjeta de crédito, Mercado Pago puede ofrecer cuotas con su propio interés.
 - Apenas se acredita el pago, llega por este WhatsApp la entrada con un QR personal, que se escanea en la puerta los dos días. Si se paga en efectivo, puede tardar unas horas en acreditarse.
@@ -347,6 +352,7 @@ export function ruleBasedReply(text: string, context: BotContext, siteUrl: strin
   if (/(precio|valor|cuanto|cuesta|sale|costo|cuota|pagar|pago|mercado ?pago|tarjeta|transferencia|efectivo)/.test(q)) {
     return [
       `La entrada sale *${FULL_PRICE_LABEL}* en un solo pago, o ${SPLIT_TOTAL_LABEL} en 2 pagos de ${SPLIT_INSTALLMENT_LABEL} (el primero reserva tu lugar y el segundo se paga ${BALANCE_DEADLINE_LABEL}).`,
+      `Es solo por la Fase 1: el fin de semana del 28 y 29 y ${SUPPORT_LABEL} con Daiana hasta la Fase 2, que tiene otro valor y se comunica a quienes llegan a esa etapa.`,
       `Se paga con Mercado Pago desde acá: ${buy}`,
       'Apenas se acredita, te llega tu entrada con QR por este WhatsApp.',
     ].join('\n');
@@ -366,7 +372,7 @@ export function ruleBasedReply(text: string, context: BotContext, siteUrl: strin
     return [
       'Metamorfosis es un taller vivencial de inteligencia emocional: psicología aplicada, ejercicios guiados y acompañamiento. No es terapia ni la reemplaza.',
       `Es un fin de semana (${EVENT_DATE_LABEL.toLowerCase()}, de ${EVENT_HOURS_LABEL}) para mirar lo que venís cargando y llevarte herramientas para tu día a día.`,
-      `Sale ${FULL_PRICE_LABEL} en un pago o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}: ${buy}`,
+      `Sale ${FULL_PRICE_LABEL} en un pago o 2 pagos de ${SPLIT_INSTALLMENT_LABEL}, e incluye además ${SUPPORT_LABEL} con Daiana hasta la Fase 2: ${buy}`,
     ].join('\n');
   }
 

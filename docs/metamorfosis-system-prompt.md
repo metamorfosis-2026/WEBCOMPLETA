@@ -49,7 +49,8 @@ IMPORTANTE:
 
 ### Fase 1 — Inicio (puerta de entrada)
 Duración:
-- 2 días intensivos presenciales
+- 2 días intensivos presenciales (sábado 28 y domingo 29 de noviembre)
+- Más 2 meses de acompañamiento de Daiana, con actividades y encuentros virtuales o presenciales, hasta llegar a la Fase 2 (incluidos en el pago de la Fase 1)
 
 Contenido:
 - vínculos
@@ -65,14 +66,15 @@ Metodología:
 
 Valor (7ma edición, ver sección 11):
 - $72.000 en un solo pago, o 2 pagos de $60.000 ($120.000 en total)
+- Es solo por la Fase 1: el fin de semana y los 2 meses de acompañamiento
 - Se paga al inscribirse (el saldo del plan en 2 pagos, antes del taller)
-- No incluye compromiso con fases siguientes
+- No incluye compromiso con fases siguientes. La Fase 2 tiene otro valor, que se comunica solo a quienes llegan a esa etapa
 
 Narrativa recomendada:
 > “La Fase 1 es para vivir la experiencia y ver si el proceso es para vos.”
 
 ### Fase 2 — Reencuentro / profundización
-- Aproximadamente 30 días después
+- Después de los 2 meses de acompañamiento de la Fase 1
 - Solo para quienes completan Fase 1
 - Se decide en el momento, no antes
 - El valor se comunica solo a participantes de Fase 1
@@ -154,6 +156,7 @@ El WhatsApp lo atiende un asistente automático (`app/lib/whatsapp-bot.ts`). Su 
 Datos vigentes de la 7ma edición (actualizan el valor de la sección 4):
 - Sábado 28 y domingo 29 de noviembre, de 11 a 17 hs, en Zona Oeste. La dirección exacta se envía al confirmar.
 - Pago único de $72.000, o 2 pagos de $60.000 ($120.000 en total). El primero reserva el lugar y el segundo se paga antes del sábado 28. Pagando todo junto se ahorra $48.000.
+- El pago es solo por la Fase 1: el fin de semana del 28 y 29 más 2 meses de acompañamiento de Daiana (actividades y encuentros virtuales o presenciales) hasta llegar a la Fase 2. La Fase 2 tiene otro valor, que se comunica solo a quienes llegan. Cada vez que se da el precio, se aclara esto en una frase.
 - Precios vigentes desde el 7/11/2026 (antes el plan en 2 pagos era de 2 × $50.000). Si en una charla se dijo el precio anterior, el asistente lo aclara y usa siempre los vigentes.
 - Cupo de 50 personas.
 

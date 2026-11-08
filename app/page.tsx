@@ -36,8 +36,10 @@ import {
   BALANCE_DEADLINE_LABEL,
   EVENT_DATE_LABEL,
   FULL_PRICE_LABEL,
+  NEXT_PHASE_PRICE_NOTE,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
+  SUPPORT_DETAIL,
 } from './lib/entradas';
 
 function envFlag(value: string | undefined, fallback = false) {
@@ -415,7 +417,7 @@ export default function Page() {
     },
     {
       question: '¿Cuánto sale la Fase 1?',
-      answer: `La entrada sale ${FULL_PRICE_LABEL} en un solo pago. Si preferís dividirlo, son ${SPLIT_TOTAL_LABEL} en dos pagos de ${SPLIT_INSTALLMENT_LABEL}: el primero reserva tu lugar y el segundo lo pagás ${BALANCE_DEADLINE_LABEL}. Todo se paga desde esta web con Mercado Pago.`,
+      answer: `La entrada sale ${FULL_PRICE_LABEL} en un solo pago. Si preferís dividirlo, son ${SPLIT_TOTAL_LABEL} en dos pagos de ${SPLIT_INSTALLMENT_LABEL}: el primero reserva tu lugar y el segundo lo pagás ${BALANCE_DEADLINE_LABEL}. Ese valor es solo por la Fase 1: el fin de semana del 28 y 29 y, además, ${SUPPORT_DETAIL}. ${NEXT_PHASE_PRICE_NOTE} Todo se paga desde esta web con Mercado Pago.`,
     },
     {
       question: '¿Qué es la Fase 1?',
@@ -424,7 +426,7 @@ export default function Page() {
     {
       question: '¿Estoy obligado a seguir después de la Fase 1?',
       answer:
-        'No. Una vez finalizada la Primera Fase, cada persona elige libremente si desea seguir avanzando en el proceso o dar por finalizada su experiencia. Quienes deciden continuar suman 8 encuentros (uno por semana, presenciales o por Meet) hasta llegar a la Segunda Fase.',
+        `No. Tu entrada a la Fase 1 ya incluye, después del fin de semana, ${SUPPORT_DETAIL}. Al llegar a la Segunda Fase, cada persona elige libremente si desea seguir avanzando en el proceso o dar por finalizada su experiencia. ${NEXT_PHASE_PRICE_NOTE}`,
     },
     {
       question: '¿Esto es terapia?',
@@ -868,6 +870,21 @@ export default function Page() {
 
                 <p className="mt-5 text-[15px] text-ivory/50">{EVENT_DATE_LABEL}</p>
 
+                <div className="mx-auto mt-8 max-w-md rounded-2xl border border-ivory/10 bg-white/[0.03] px-5 py-5 text-left">
+                  <p className="text-[15px] font-semibold text-ivory">Tu pago es solo por la Fase 1 e incluye:</p>
+                  <ul className="mt-3 grid gap-2 text-[15px] leading-snug text-ivory/75">
+                    <li className="flex gap-2.5">
+                      <span aria-hidden="true" className="text-celeste">✓</span>
+                      <span>El taller del {EVENT_DATE_LABEL.toLowerCase()}.</span>
+                    </li>
+                    <li className="flex gap-2.5">
+                      <span aria-hidden="true" className="text-celeste">✓</span>
+                      <span>{SUPPORT_DETAIL.charAt(0).toUpperCase() + SUPPORT_DETAIL.slice(1)}.</span>
+                    </li>
+                  </ul>
+                  <p className="mt-3 text-[13px] leading-relaxed text-ivory/50">{NEXT_PHASE_PRICE_NOTE}</p>
+                </div>
+
                 <div className="mx-auto mt-10 max-w-md border-t border-ivory/12 pt-9">
                   <p className="display-sm text-[1.2rem] text-ivory">¿Preferís pagarlo en dos partes?</p>
                   <p className="mt-4 text-[16px] leading-relaxed text-ivory/70">
@@ -960,13 +977,13 @@ export default function Page() {
           <Reveal>
             <SectionHeading
               num="06"
-              eyebrow="Después de la Fase 1"
+              eyebrow="Después del fin de semana"
               title={
                 <>
                   Y si querés, el camino <em>continúa</em>
                 </>
               }
-              lead="Primero se vive la Fase 1. Recién después, y solo si vos querés, se abre el resto del proceso. Nada se vende como paquete cerrado."
+              lead="Tu entrada a la Fase 1 incluye el fin de semana y 2 meses de acompañamiento. Recién después, y solo si vos querés, se abre el resto del proceso. Nada se vende como paquete cerrado."
             />
           </Reveal>
 
@@ -974,18 +991,18 @@ export default function Page() {
             {[
               {
                 n: '01',
-                t: '8 encuentros semanales',
-                d: 'Quienes deciden continuar tienen 8 encuentros, uno por semana, presenciales o por Meet, para seguir profundizando hasta llegar a la Segunda Fase.',
+                t: '2 meses de acompañamiento',
+                d: 'Ya incluidos en tu entrada a la Fase 1: después del fin de semana, Daiana te acompaña con actividades y encuentros, virtuales o presenciales, hasta llegar a la Segunda Fase.',
               },
               {
                 n: '02',
                 t: 'Fases 2 y 3',
-                d: 'Metamorfosis está pensado como un proceso de 4 meses dividido en 3 fases. Se ingresa siempre por la Fase 1 y después decidís cómo continuar.',
+                d: `Metamorfosis está pensado como un proceso de 4 meses dividido en 3 fases, y cada fase se paga por separado. ${NEXT_PHASE_PRICE_NOTE}`,
               },
               {
                 n: '03',
                 t: 'Sin obligación',
-                d: 'Una vez finalizada la Primera Fase, cada persona elige libremente si desea seguir avanzando o dar por finalizada su experiencia.',
+                d: 'Al llegar a la Segunda Fase, cada persona elige libremente si desea seguir avanzando o dar por finalizada su experiencia.',
               },
             ].map((step, i) => (
               <Reveal key={step.t} delay={i * 0.07}>

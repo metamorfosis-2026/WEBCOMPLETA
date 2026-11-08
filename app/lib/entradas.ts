@@ -52,6 +52,17 @@ export const EVENT_START = new Date('2026-11-28T11:00:00-03:00');
 export const EVENT_END = new Date('2026-11-29T17:00:00-03:00');
 export const BALANCE_DEADLINE_LABEL = 'antes del sábado 28';
 
+/*
+  Que cubre lo que se paga (pago unico o en 2): solo la Fase 1, que es el
+  fin de semana del 28 y 29 y suma 2 meses de acompanamiento de Daiana. La
+  Fase 2 tiene otro valor, que se informa solo a quienes llegan a esa etapa.
+  Lo usan la web, el checkout, Mercado Pago y el bot de WhatsApp.
+*/
+export const SUPPORT_LABEL = '2 meses de acompañamiento';
+export const SUPPORT_DETAIL = `${SUPPORT_LABEL} de Daiana, con actividades y encuentros virtuales o presenciales, hasta llegar a la Fase 2`;
+export const NEXT_PHASE_PRICE_NOTE = 'La Fase 2 tiene otro valor, que se comunica solo a quienes llegan a esa etapa.';
+export const TICKET_SCOPE_TEXT = `El pago es solo por la Fase 1: el taller del ${EVENT_DATE_LABEL.toLowerCase()} y, además, ${SUPPORT_DETAIL}. ${NEXT_PHASE_PRICE_NOTE}`;
+
 // Flyer oficial (public/entradas/flyer-7ma.jpg): og:image de /entradas y
 // primera imagen que manda el WhatsApp.
 export const FLYER_PATH = '/entradas/flyer-7ma.jpg';

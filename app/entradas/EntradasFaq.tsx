@@ -4,6 +4,7 @@ import {
   FULL_PRICE_LABEL,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
+  TICKET_SCOPE_TEXT,
 } from '@/app/lib/entradas';
 
 /*
@@ -14,6 +15,10 @@ import {
   pantalla sin JavaScript.
 */
 const FAQ = [
+  {
+    question: '¿Qué incluye lo que pago?',
+    answer: `${TICKET_SCOPE_TEXT} Al llegar a la Fase 2, seguir es siempre tu decisión.`,
+  },
   {
     question: '¿Cómo pago?',
     answer:

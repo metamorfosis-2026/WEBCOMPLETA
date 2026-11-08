@@ -14,6 +14,7 @@ import {
   EVENT_DATE_LABEL,
   EVENT_HOURS_LABEL,
   EVENT_PLACE,
+  SUPPORT_LABEL,
   firstName,
   formatPesos,
 } from './entradas';
@@ -32,6 +33,7 @@ export type TicketForMessage = {
 export type TicketLinks = { ticket: string; pay: string; image: string };
 
 const PLACE_LINE = EVENT_ADDRESS ? `📍 ${EVENT_ADDRESS}` : `📍 ${EVENT_PLACE} (te pasamos la dirección exacta por acá)`;
+const INCLUDES_LINE = `Tu entrada es por la Fase 1: incluye el taller y, después, ${SUPPORT_LABEL} con Daiana hasta llegar a la Fase 2.`;
 
 function hello(ticket: TicketForMessage) {
   const name = firstName(ticket.fullName);
@@ -46,6 +48,8 @@ export function confirmationMessage(ticket: TicketForMessage, links: TicketLinks
     `📅 ${EVENT_DATE_LABEL}`,
     `🕚 De ${EVENT_HOURS_LABEL}, los dos días`,
     PLACE_LINE,
+    '',
+    INCLUDES_LINE,
     '',
     `🎟️ Código: *${ticket.code}*`,
     `Tu entrada con QR: ${links.ticket}`,
@@ -73,6 +77,8 @@ export function depositMessage(ticket: TicketForMessage, links: TicketLinks): Ou
     `📅 ${EVENT_DATE_LABEL}`,
     `🕚 De ${EVENT_HOURS_LABEL}, los dos días`,
     PLACE_LINE,
+    '',
+    INCLUDES_LINE,
     '',
     `🎟️ Código: *${ticket.code}*`,
     `Tu entrada con QR: ${links.ticket}`,

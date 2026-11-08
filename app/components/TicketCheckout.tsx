@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, useTransition } from 'reac
 import { createPortal } from 'react-dom';
 
 import { startTicketCheckout, type CheckoutError } from '@/app/actions/entradas';
-import { LockIcon, QrIcon } from '@/app/entradas/icons';
+import { CheckIcon, LockIcon, QrIcon } from '@/app/entradas/icons';
 import {
   BALANCE_DEADLINE_LABEL,
   EVENT_DATE_LABEL,
@@ -12,8 +12,10 @@ import {
   EVENT_PLACE,
   FULL_PRICE_LABEL,
   FULL_SAVINGS_LABEL,
+  NEXT_PHASE_PRICE_NOTE,
   SPLIT_INSTALLMENT_LABEL,
   SPLIT_TOTAL_LABEL,
+  SUPPORT_LABEL,
   type TicketPlan,
 } from '@/app/lib/entradas';
 import { INSTAGRAM_DM_URL } from '@/app/lib/inscripcion';
@@ -341,6 +343,29 @@ export function TicketCheckout({
             <p className="mt-3 text-center text-[14px] text-ivory/75 [text-wrap:balance] lg:hidden">{PLAN_COPY[plan].detail}</p>
           ) : null}
         </fieldset>
+
+        {/* Que cubre el pago: solo la Fase 1 (fin de semana + 2 meses de
+            acompanamiento). La Fase 2 se paga aparte y su valor no se publica. */}
+        <div className={`${isPage ? 'mt-4 lg:mt-5' : 'mt-5'} rounded-xl border border-ivory/10 bg-white/[0.03] px-4 py-3.5${center}`}>
+          <p className="text-[14px] font-semibold text-white">Tu pago es solo por la Fase 1 e incluye:</p>
+          <ul
+            className={`mt-2 grid gap-1.5 text-left text-[14px] leading-snug text-ivory/80${
+              isPage ? ' mx-auto w-fit max-w-full lg:mx-0' : ''
+            }`}
+          >
+            <li className="flex items-start gap-2">
+              <CheckIcon className="mt-px h-4 w-4 flex-none text-celeste" />
+              <span>El taller del sábado 28 y domingo 29</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckIcon className="mt-px h-4 w-4 flex-none text-celeste" />
+              <span>
+                {SUPPORT_LABEL} de Daiana, con actividades y encuentros virtuales o presenciales
+              </span>
+            </li>
+          </ul>
+          <p className="mt-2 text-[13px] leading-relaxed text-ivory/60 [text-wrap:balance]">{NEXT_PHASE_PRICE_NOTE}</p>
+        </div>
 
         <div className={isPage ? 'mt-6 grid gap-4 lg:mt-7 lg:gap-5' : 'mt-7 grid gap-5'}>
           <div>
