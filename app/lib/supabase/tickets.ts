@@ -202,6 +202,22 @@ export async function findPendingTicketByPhone(phone: string) {
   return data ? mapTicket(data) : null;
 }
 
+// Entrada (no cancelada) creada desde un origen exacto: para saber si un link
+// de invitacion ya se uso.
+export async function findTicketBySource(source: string) {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('*')
+    .eq('source', source)
+    .neq('status', 'CANCELADO')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle<DbTicket>();
+  assertNoError(error);
+  return data ? mapTicket(data) : null;
+}
+
 export async function listTicketsByPhone(phone: string) {
   const supabase = createAdminClient();
   const { data, error } = await supabase

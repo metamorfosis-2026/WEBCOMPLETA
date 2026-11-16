@@ -5,7 +5,8 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
-import { TICKET_PLANS, computeTicketStatus, isTicketPlan } from '@/app/lib/entradas';
+import { TICKET_PLANS, computeTicketStatus, invitationPath, isTicketPlan } from '@/app/lib/entradas';
+import { createInvitationToken } from '@/app/lib/invitaciones';
 import {
   checkInTicket,
   createManualTicket,
@@ -46,6 +47,14 @@ function done(formData: FormData, notice: string): never {
 
 function paymentMethod(value: FormDataEntryValue | null) {
   return String(value ?? '') === 'EFECTIVO' ? 'EFECTIVO' : 'TRANSFERENCIA';
+}
+
+/* ------------------------------------------------------------- invitaciones */
+
+// Genera un link de invitacion nuevo (sirve para una sola entrada, sin pago).
+export async function createInvitationLinkAction() {
+  await requireAdmin();
+  return { url: `${siteUrl()}${invitationPath(createInvitationToken())}` };
 }
 
 /* ------------------------------------------------------------------- puerta */

@@ -120,6 +120,23 @@ export function isDuoGuest(ticket: { plan: TicketPlan; source: string | null }) 
   return ticket.plan === 'DUO' && /^promo para dos de M7-/.test(ticket.source ?? '');
 }
 
+/*
+  Invitaciones: entradas que regala el equipo con un link de un solo uso
+  (/entradas/invitacion/TOKEN, se genera desde el admin). La entrada queda
+  confirmada sin pago: total 0 y en `source` "invitacion <id del link>".
+  Hacia la persona nunca se habla de precio ni de "gratis": es una invitacion.
+*/
+export const INVITATION_ID_RE = /^[2-9A-HJ-NP-Z]{8}$/;
+export function invitationSource(invitationId: string) {
+  return `invitacion ${invitationId}`;
+}
+export function isInvitationTicket(ticket: { source?: string | null; totalCents: number }) {
+  return ticket.totalCents === 0 && /^invitacion [2-9A-HJ-NP-Z]{8}$/.test(ticket.source ?? '');
+}
+export function invitationPath(token: string) {
+  return `/entradas/invitacion/${token}`;
+}
+
 export function computeTicketStatus(totalCents: number, paidCents: number, cancelled = false): TicketStatus {
   if (cancelled) return 'CANCELADO';
   if (paidCents >= totalCents) return 'PAGADO';

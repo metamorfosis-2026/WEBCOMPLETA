@@ -17,6 +17,7 @@ import {
   argentinaDay,
   businessWhatsAppUrl,
   formatPesos,
+  isInvitationTicket,
   nextInstallment,
   ticketPaths,
   ticketStatusLabel,
@@ -128,6 +129,12 @@ export default async function TicketPage({
 
       <PaymentBanner pago={pago} status={ticket.status} />
 
+      {param(searchParams, 'invitacion') === 'ok' && isInvitationTicket(ticket) && ticket.status === 'PAGADO' ? (
+        <p className="mb-6 rounded-2xl border border-celeste/30 bg-celeste/[0.08] p-4 text-[15px] leading-relaxed text-ivory/85">
+          ¡Listo! Tu invitación está confirmada. También te mandamos la entrada por WhatsApp.
+        </p>
+      ) : null}
+
       <article className="surface surface-accent p-6 sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-celeste">Entrada · Fase 1 · 7ma edición</p>
@@ -158,10 +165,14 @@ export default async function TicketPage({
           <Detail term="Fecha" value={EVENT_DATE_LABEL} />
           <Detail term="Horario" value={`${EVENT_HOURS_LABEL} (los dos días)`} />
           <Detail term="Lugar" value={EVENT_PLACE} />
-          <Detail
-            term={TICKET_PLANS[ticket.plan].label}
-            value={`Pagado ${formatPesos(ticket.paidCents)} de ${formatPesos(ticket.totalCents)}`}
-          />
+          {isInvitationTicket(ticket) ? (
+            <Detail term="Invitación" value="Entrada confirmada · 1 persona" />
+          ) : (
+            <Detail
+              term={TICKET_PLANS[ticket.plan].label}
+              value={`Pagado ${formatPesos(ticket.paidCents)} de ${formatPesos(ticket.totalCents)}`}
+            />
+          )}
         </dl>
 
         <div className="mt-8 grid gap-3">

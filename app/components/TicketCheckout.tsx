@@ -104,12 +104,13 @@ const FIRST_PAYMENT: Record<TicketPlan, string> = {
   DUO: DUO_TOTAL_LABEL,
 };
 
-const labelClass = 'block text-[14px] font-medium text-ivory/90';
-const hintClass = 'mt-2 text-[13px] leading-relaxed text-ivory/60 [text-wrap:balance]';
-const errorTextClass = 'mt-2 text-[13px] leading-relaxed text-sand [text-wrap:balance]';
+// Estilos de los campos: tambien los usa el formulario de invitacion.
+export const labelClass = 'block text-[14px] font-medium text-ivory/90';
+export const hintClass = 'mt-2 text-[13px] leading-relaxed text-ivory/60 [text-wrap:balance]';
+export const errorTextClass = 'mt-2 text-[13px] leading-relaxed text-sand [text-wrap:balance]';
 
 // compact: /entradas en celular (campos de 48 px, siguen comodos para el dedo).
-function inputClass(invalid: boolean, compact = false) {
+export function inputClass(invalid: boolean, compact = false) {
   return `${compact ? 'mt-1.5 h-12 lg:mt-2 lg:h-[52px]' : 'mt-2 h-[52px]'} w-full rounded-xl border bg-white/[0.04] px-4 text-[16px] text-white outline-none transition placeholder:text-ivory/35 focus:border-celeste focus:bg-white/[0.07] focus:ring-2 focus:ring-celeste/30 ${
     invalid ? 'border-sand/70' : 'border-ivory/15 hover:border-ivory/30'
   }`;

@@ -186,7 +186,9 @@ function describeTicket(ticket: BotTicket) {
   const balance = ticket.totalCents - ticket.paidCents;
   const parts = [
     `${ticket.code} a nombre de ${ticket.fullName}: ${ticketStatusLabel(ticket.status)}`,
-    `pagado ${formatPesos(ticket.paidCents)} de ${formatPesos(ticket.totalCents)}`,
+    ticket.totalCents === 0
+      ? 'es una invitación del equipo: no tiene nada que pagar (no hables de precio ni digas "gratis", decile que es una invitación)'
+      : `pagado ${formatPesos(ticket.paidCents)} de ${formatPesos(ticket.totalCents)}`,
     `entrada con QR: ${ticket.links.ticket}`,
   ];
   if (ticket.status !== 'PAGADO' && balance > 0) parts.push(`link para pagar lo que falta: ${ticket.links.pay}`);

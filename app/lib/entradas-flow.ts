@@ -26,6 +26,7 @@ import {
   duoGuestSource,
   duoPartnerCode,
   formatPesos,
+  invitationSource,
   isDuoGuest,
   nextInstallment,
   repricedTotal,
@@ -61,6 +62,7 @@ import {
   countRecentBotReplies,
   countSoldTickets,
   findPendingTicketByPhone,
+  findTicketBySource,
   getTicketByCode,
   getTicketById,
   hasSentMessageKind,
@@ -285,6 +287,51 @@ export async function startCheckout(
   const url = await createPaymentLink(ticket, siteUrl);
   if (!url) throw new Error('NO_PAYMENT_DUE');
   return { ticket, url };
+}
+
+/* ------------------------------------------------------------ invitaciones */
+
+export type InvitationError = 'USED' | 'HAS_TICKET' | 'SOLD_OUT';
+
+/*
+  Canjea un link de invitacion: la entrada queda confirmada sin pago (total 0)
+  y sale el WhatsApp con el QR, igual que en una compra. Un link = una entrada.
+  Si la misma persona vuelve a enviar el formulario, se le devuelve su entrada.
+*/
+export async function claimInvitation(
+  input: { invitationId: string; fullName: string; phone: string; email: string | null },
+  siteUrl: string
+): Promise<{ ok: true; ticket: Ticket } | { ok: false; error: InvitationError }> {
+  const source = invitationSource(input.invitationId);
+
+  const used = await findTicketBySource(source);
+  if (used) return used.phone === input.phone ? { ok: true, ticket: used } : { ok: false, error: 'USED' };
+  if (await hasActiveTicket(input.phone)) return { ok: false, error: 'HAS_TICKET' };
+  if ((await countSoldTickets()) >= TICKET_CAPACITY) return { ok: false, error: 'SOLD_OUT' };
+
+  const values = {
+    full_name: input.fullName,
+    plan: 'FULL' as const,
+    total_cents: 0,
+    paid_cents: 0,
+    status: 'PAGADO' as const,
+    source,
+  };
+  // Si ese WhatsApp tenia una entrada iniciada y sin pagar, se convierte en la invitacion.
+  const pending = await findPendingTicketByPhone(input.phone);
+  const converted = pending
+    ? await updateTicketIfStatus(pending.id, 'PENDIENTE', input.email ? { ...values, email: input.email } : values)
+    : null;
+  const ticket =
+    converted ?? (await insertTicket({ ...values, edition_label: EDITION_LABEL, phone: input.phone, email: input.email }));
+
+  try {
+    await notifyTicket(ticket, siteUrl);
+  } catch (error) {
+    console.error('[invitacion] no se pudo mandar el WhatsApp de', ticket.code, error);
+  }
+  await syncSignupStatus(ticket);
+  return { ok: true, ticket };
 }
 
 /* ------------------------------------------------------------- recalculo */

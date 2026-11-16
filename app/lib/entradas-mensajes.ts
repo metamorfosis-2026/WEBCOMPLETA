@@ -19,6 +19,7 @@ import {
   SUPPORT_LABEL,
   firstName,
   formatPesos,
+  isInvitationTicket,
 } from './entradas';
 import type { OutgoingWhatsApp } from './whatsapp';
 
@@ -32,6 +33,8 @@ export type TicketForMessage = {
   status: string;
   // Promo para dos: nombre de la otra persona.
   companionName?: string | null;
+  // Para reconocer las invitaciones (ver isInvitationTicket).
+  source?: string | null;
 };
 
 export type TicketLinks = { ticket: string; pay: string; image: string };
@@ -47,7 +50,9 @@ function hello(ticket: TicketForMessage) {
 export function confirmationMessage(ticket: TicketForMessage, links: TicketLinks): OutgoingWhatsApp {
   const text = [
     `${hello(ticket)} 🦋`,
-    'Tu entrada para *Metamorfosis 7ma Edición* está confirmada ✅',
+    isInvitationTicket(ticket)
+      ? 'Tu invitación a *Metamorfosis 7ma Edición* está confirmada ✅ ¡Nos alegra que vengas!'
+      : 'Tu entrada para *Metamorfosis 7ma Edición* está confirmada ✅',
     ticket.companionName ? `Es parte de la promo para dos, junto a *${ticket.companionName}* 💙` : null,
     '',
     `📅 ${EVENT_DATE_LABEL}`,

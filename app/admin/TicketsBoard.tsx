@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 
 import {
   TICKET_PLANS,
   argentinaDay,
   formatPesos,
+  isInvitationTicket,
   nextInstallment,
   ticketPaths,
   type TicketPlan,
@@ -16,6 +17,7 @@ import { prettyPhone } from '@/app/lib/phone';
 
 import {
   checkInTicketAction,
+  createInvitationLinkAction,
   createTicketAction,
   deleteTicketPaymentAction,
   recordTicketPaymentAction,
@@ -191,6 +193,7 @@ export function TicketsBoard({
       </div>
 
       <CreateTicketForm />
+      <InvitationLinks />
 
       {/* ----------------------------------------------------------- filtros */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -339,12 +342,78 @@ function CreateTicketForm() {
   );
 }
 
+/*
+  Links de invitacion: cada uno sirve para una entrada. La persona lo abre,
+  deja sus datos y recibe la entrada con QR, sin pagar. Aparece en la lista
+  como "Invitación" (Desde: invitacion <id>).
+*/
+function InvitationLinks() {
+  const [links, setLinks] = useState<string[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const copy = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(url);
+      window.setTimeout(() => setCopied((current) => (current === url ? null : current)), 2400);
+    } catch {
+      // Sin permiso de portapapeles el link sigue visible y seleccionable.
+    }
+  };
+
+  const generate = () => {
+    setFailed(false);
+    startTransition(async () => {
+      try {
+        const { url } = await createInvitationLinkAction();
+        setLinks((current) => [url, ...current]);
+        await copy(url);
+      } catch (error) {
+        console.error('[admin] no se pudo generar el link de invitación:', error);
+        setFailed(true);
+      }
+    });
+  };
+
+  return (
+    <details className="rounded-2xl border border-white/10 bg-white/[0.03]">
+      <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-white/85 [&::-webkit-details-marker]:hidden">
+        + Invitar a alguien{' '}
+        <span className="font-normal text-white/45">(link de invitación: completa sus datos y recibe su QR, sin pagar)</span>
+      </summary>
+      <div className="grid gap-3 px-5 pb-5">
+        <p className="text-xs leading-relaxed text-white/55">
+          Cada link sirve para <strong className="text-white/80">una sola entrada</strong>. Para invitar a otra persona, generá otro
+          link. Si cancelás la entrada, el link vuelve a servir.
+        </p>
+        <div>
+          <button type="button" onClick={generate} disabled={isPending} className={`${primaryButton} disabled:opacity-60`}>
+            {isPending ? 'Generando…' : 'Generar link de invitación'}
+          </button>
+        </div>
+        {failed ? <p className="text-xs text-red-300">No se pudo generar el link. Probá de nuevo.</p> : null}
+        {links.map((url) => (
+          <div key={url} className="flex flex-wrap items-center gap-2">
+            <input readOnly value={url} onFocus={(event) => event.target.select()} className={`${fieldClass} min-w-0 flex-1`} aria-label="Link de invitación" />
+            <button type="button" onClick={() => copy(url)} className={ghostButton}>
+              {copied === url ? 'Copiado ✓' : 'Copiar'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function TicketRow({ ticket, today, siteUrl }: { ticket: BoardTicket; today: string; siteUrl: string }) {
   const style = STATUS_STYLE[ticket.status];
   const paths = ticketPaths(ticket.code);
   const due = nextInstallment(ticket);
   const todayCheckin = ticket.checkins.find((checkin) => argentinaDay(new Date(checkin.createdAt)) === today) ?? null;
   const hasAccess = ticket.status === 'PAGADO' || ticket.status === 'SENADO';
+  const invited = isInvitationTicket(ticket);
 
   // El mismo mensaje que manda el sistema, para mandarlo a mano desde el celu.
   const manual = messageForTicket(ticket, {
@@ -363,13 +432,19 @@ function TicketRow({ ticket, today, siteUrl }: { ticket: BoardTicket; today: str
             {todayCheckin ? <span className="ml-2 text-xs font-normal text-emerald-300">· adentro</span> : null}
           </p>
           <p className="truncate text-xs text-white/45">
-            {ticket.code} · {TICKET_PLANS[ticket.plan].label}
+            {ticket.code} · {invited ? 'Invitación' : TICKET_PLANS[ticket.plan].label}
             <span className="md:hidden"> · {prettyPhone(ticket.phone)}</span>
           </p>
         </div>
         <span className="hidden truncate text-sm tabular-nums text-white/75 md:block">{prettyPhone(ticket.phone)}</span>
         <span className="hidden text-sm tabular-nums text-white/70 md:block">
-          {formatPesos(ticket.paidCents)} <span className="text-white/35">/ {formatPesos(ticket.totalCents)}</span>
+          {invited ? (
+            'Invitación'
+          ) : (
+            <>
+              {formatPesos(ticket.paidCents)} <span className="text-white/35">/ {formatPesos(ticket.totalCents)}</span>
+            </>
+          )}
         </span>
         <span className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${style.chip}`}>
           <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
