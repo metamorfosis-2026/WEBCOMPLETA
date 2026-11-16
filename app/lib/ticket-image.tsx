@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og';
 import QRCode from 'qrcode';
 
-import { EVENT_DATE_LABEL, EVENT_HOURS_LABEL, EVENT_PLACE, formatPesos } from './entradas';
+import { EVENT_ADDRESS, EVENT_DATE_LABEL, EVENT_HOURS_LABEL, EVENT_PLACE, formatPesos } from './entradas';
 
 /*
   Imagen de la entrada (PNG 1080x1350) con el QR: es la que se manda por
@@ -91,6 +91,10 @@ export async function renderTicketImage(
           <div style={{ display: 'flex', fontSize: 30 }}>{EVENT_DATE_LABEL}</div>
           <div style={{ display: 'flex', marginTop: 10, fontSize: 26, color: 'rgba(233,241,247,0.6)' }}>
             {`${EVENT_HOURS_LABEL} · ${EVENT_PLACE}`}
+          </div>
+          {/* Direccion exacta: esta imagen solo se genera para entradas con pago. */}
+          <div style={{ display: 'flex', marginTop: 10, fontSize: 23, textAlign: 'center', color: 'rgba(233,241,247,0.8)' }}>
+            {EVENT_ADDRESS}
           </div>
         </div>
       </div>

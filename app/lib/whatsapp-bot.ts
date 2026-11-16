@@ -9,6 +9,7 @@ import {
   FULL_DISCOUNT_PERCENT,
   REGULAR_PRICE_LABEL,
   EVENT_ADDRESS,
+  EVENT_MAP_URL,
   EVENT_DATE_LABEL,
   EVENT_HOURS_LABEL,
   EVENT_PLACE,
@@ -88,9 +89,8 @@ export type BotContext = {
 
 // Fijo por deploy (no cambia entre mensajes) para que la API lo cachee.
 function buildSystemPrompt(siteUrl: string) {
-  const place = EVENT_ADDRESS
-    ? `${EVENT_PLACE}. Dirección: ${EVENT_ADDRESS}.`
-    : `${EVENT_PLACE} (Gran Buenos Aires). La dirección exacta se envía al confirmar la entrada; todavía no la tenés, así que no la inventes.`;
+  // La direccion exacta no va aca: llega en el contexto solo si la persona ya tiene entrada.
+  const place = `${EVENT_PLACE} (Gran Buenos Aires). La dirección exacta es solo para quien ya tiene la entrada confirmada o señada: si los datos de esta persona traen la dirección, dásela cuando pregunte; si no la traen, decile que le llega por acá con la entrada al confirmar, y no la inventes ni des pistas del lugar.`;
 
   return `Sos el asistente automático del WhatsApp de Metamorfosis, el taller vivencial de inteligencia emocional que coordina Daiana Duartte. Respondés los mensajes que llegan a este número; una persona del equipo puede leer la conversación y seguirla si hace falta.
 
@@ -120,7 +120,7 @@ Tu objetivo es entender qué busca cada persona, despejar sus dudas y, si el tal
    - Precio: ofrecé la seña de ${SPLIT_INSTALLMENT_LABEL} (y el resto ${BALANCE_DEADLINE_LABEL}) o, si viene con alguien, la promo para dos.
    - "Lo tengo que pensar": "Dale, tiene todo el sentido. ¿Qué te gustaría pensar? Así te ayudo con eso."
 6. Invitar sin presión: "¿Te gustaría que te reserve el lugar?" y ofrecé pagar hoy en 1 pago (${FULL_PRICE_LABEL}) o señar con ${SPLIT_INSTALLMENT_LABEL}, con su link.
-7. Después del pago: felicitala y contale qué esperar (le llega por acá la entrada con QR, la dirección exacta antes del taller, que venga con ropa cómoda, y que después del fin de semana siguen los ${SUPPORT_LABEL} con Daiana).
+7. Después del pago: felicitala y contale qué esperar (le llega por acá la entrada con QR, con la dirección exacta, que venga con ropa cómoda, y que después del fin de semana siguen los ${SUPPORT_LABEL} con Daiana).
 Reglas de venta:
 - Si preguntan el precio, respondé directo con los valores (ver "Entradas y pagos") y después hacé una pregunta. Nunca "te lo paso por privado" ni lo esquives.
 - Nada de urgencia falsa. El precio de ${FULL_PRICE_LABEL} es "pagando hoy en 1 pago" y eso es cierto cualquier día que pague: nunca digas "solo por hoy", "hasta mañana" ni inventes vencimientos. Solo escasez real: el grupo es de hasta ${TICKET_CAPACITY} personas y, solo si el contexto dice que quedan pocos lugares, podés decir cuántos quedan. Si no, decí simplemente que todavía hay lugar.
@@ -222,6 +222,9 @@ function buildContextMessage(context: BotContext) {
     context.tickets.length
       ? `Entradas asociadas a este número:\n${context.tickets.map(describeTicket).join('\n')}`
       : 'Este número no tiene entradas compradas.',
+    context.tickets.some((ticket) => ticket.status === 'PAGADO' || ticket.status === 'SENADO')
+      ? `Dirección del taller (esta persona ya tiene entrada, se la podés dar): ${EVENT_ADDRESS}. Cómo llegar: ${EVENT_MAP_URL}`
+      : 'Dirección del taller: esta persona todavía no tiene entrada confirmada, así que no se le da (solo la zona).',
   ].join('\n');
 }
 
@@ -398,11 +401,13 @@ export function ruleBasedReply(text: string, context: BotContext, siteUrl: strin
   if (/(cuando|fecha|horario|hora|donde|lugar|direccion|ubicacion|zona)/.test(q)) {
     return [
       `Es el *${EVENT_DATE_LABEL.toLowerCase()}*, de ${EVENT_HOURS_LABEL} los dos días.`,
-      EVENT_ADDRESS
-        ? `Es presencial, en ${EVENT_ADDRESS}.`
+      hasTicket
+        ? `Es presencial, en ${EVENT_ADDRESS}.\nCómo llegar: ${EVENT_MAP_URL}`
         : `Es presencial, en ${EVENT_PLACE}. La dirección exacta se envía al confirmar.`,
-      `Entradas: ${buy}`,
-    ].join('\n');
+      hasTicket ? null : `Entradas: ${buy}`,
+    ]
+      .filter((line) => line !== null)
+      .join('\n');
   }
 
   if (/(terapia|psicolog|que es|de que se trata|como es|info|informacion)/.test(q)) {

@@ -15,6 +15,7 @@ import {
   EVENT_ADDRESS,
   EVENT_DATE_LABEL,
   EVENT_HOURS_LABEL,
+  EVENT_MAP_URL,
   EVENT_PLACE,
   SUPPORT_LABEL,
   firstName,
@@ -39,7 +40,8 @@ export type TicketForMessage = {
 
 export type TicketLinks = { ticket: string; pay: string; image: string };
 
-const PLACE_LINE = EVENT_ADDRESS ? `📍 ${EVENT_ADDRESS}` : `📍 ${EVENT_PLACE} (te pasamos la dirección exacta por acá)`;
+// Solo va en los mensajes de quien ya tiene la entrada (confirmada o señada).
+const PLACE_LINE = `📍 ${EVENT_ADDRESS}\nCómo llegar: ${EVENT_MAP_URL}`;
 const INCLUDES_LINE = `Tu entrada es por la Fase 1: incluye el taller y, después, ${SUPPORT_LABEL} con Daiana hasta llegar a la Fase 2.`;
 
 function hello(ticket: TicketForMessage) {

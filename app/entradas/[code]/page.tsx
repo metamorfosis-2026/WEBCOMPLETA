@@ -11,7 +11,9 @@ import {
   BALANCE_DEADLINE_LABEL,
   DUO_TOTAL_CENTS,
   EVENT_DATE_LABEL,
+  EVENT_ADDRESS,
   EVENT_HOURS_LABEL,
+  EVENT_MAP_URL,
   EVENT_PLACE,
   TICKET_PLANS,
   argentinaDay,
@@ -164,7 +166,20 @@ export default async function TicketPage({
         <dl className="mt-8 grid gap-x-6 gap-y-5 border-t border-ivory/10 pt-7 sm:grid-cols-2">
           <Detail term="Fecha" value={EVENT_DATE_LABEL} />
           <Detail term="Horario" value={`${EVENT_HOURS_LABEL} (los dos días)`} />
-          <Detail term="Lugar" value={EVENT_PLACE} />
+          {/* La direccion exacta solo se muestra con la entrada confirmada o señada. */}
+          {hasAccess ? (
+            <div>
+              <dt className="text-[11px] font-bold uppercase tracking-[0.18em] text-ivory/40">Lugar</dt>
+              <dd className="mt-1.5 text-[15px] text-ivory/85">
+                {EVENT_ADDRESS}
+                <a href={EVENT_MAP_URL} target="_blank" rel="noreferrer" className="mt-1 block font-semibold text-celeste underline">
+                  Cómo llegar
+                </a>
+              </dd>
+            </div>
+          ) : (
+            <Detail term="Lugar" value={EVENT_PLACE} />
+          )}
           {isInvitationTicket(ticket) ? (
             <Detail term="Invitación" value="Entrada confirmada · 1 persona" />
           ) : (

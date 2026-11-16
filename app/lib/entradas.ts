@@ -55,8 +55,15 @@ export const EVENT_DATE_LABEL = 'Sábado 28 y domingo 29 de noviembre';
 export const EVENT_SCHEDULE_LABEL = FASE1_SCHEDULE;
 export const EVENT_HOURS_LABEL = '11 a 17 hs';
 export const EVENT_PLACE = EDITION_PLACE;
-// Direccion exacta: si se carga en Vercel sale en los mensajes de WhatsApp.
-export const EVENT_ADDRESS = (process.env.NEXT_PUBLIC_EVENT_ADDRESS ?? '').trim();
+/*
+  Direccion exacta del taller: solo para quien ya tiene la entrada confirmada
+  o señada (mensajes de WhatsApp de la entrada, pagina del QR y el bot cuando
+  esa persona pregunta). En la web publica y a quien todavia no pago se le
+  dice solo la zona (EVENT_PLACE).
+*/
+export const EVENT_ADDRESS =
+  (process.env.NEXT_PUBLIC_EVENT_ADDRESS ?? '').trim() || 'West Park · Av. Pres. Perón 4678, Morón, Provincia de Buenos Aires';
+export const EVENT_MAP_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('West Park, Av. Pres. Perón 4678, Morón, Provincia de Buenos Aires')}`;
 export const EVENT_START = new Date('2026-11-28T11:00:00-03:00');
 export const EVENT_END = new Date('2026-11-29T17:00:00-03:00');
 export const BALANCE_DEADLINE_LABEL = 'antes del sábado 28';

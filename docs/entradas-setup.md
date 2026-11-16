@@ -107,7 +107,7 @@ En Vercel (Settings → Environment Variables, en Production):
 | `ANTHROPIC_API_KEY` | La IA que contesta el WhatsApp |
 | `ANTHROPIC_MODEL` | (Opcional) Otro modelo, por ejemplo `claude-haiku-5-5` |
 | `NEXT_PUBLIC_WHATSAPP_NUMBER` | Número del WhatsApp Business, solo dígitos (`549...`) |
-| `NEXT_PUBLIC_EVENT_ADDRESS` | (Opcional) Dirección exacta: si está, sale en los mensajes y el bot la sabe |
+| `NEXT_PUBLIC_EVENT_ADDRESS` | (Opcional) Reemplaza la dirección exacta que viene en el código (West Park, Morón). Solo se le muestra a quien ya tiene la entrada confirmada o señada |
 
 Las variables que empiezan con `NEXT_PUBLIC_` recién se aplican con un nuevo deploy. Los recordatorios los dispara Vercel Cron todos los días a las 10:00 de Argentina (`vercel.json`).
 
